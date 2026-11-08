@@ -1,0 +1,15 @@
+{
+  "spark.sql.extensions": "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions",
+  "spark.sql.catalog.glue": "org.apache.iceberg.spark.SparkCatalog",
+  "spark.sql.catalog.glue.catalog-impl": "org.apache.iceberg.aws.glue.GlueCatalog",
+  "spark.sql.catalog.glue.io-impl": "org.apache.iceberg.aws.s3.S3FileIO",
+  "spark.jars": "/usr/share/aws/iceberg/lib/iceberg-spark3-runtime.jar",
+  "spark.sql.session.timeZone": "UTC",
+  "spark.sql.iceberg.handle-timestamp-without-timezone": "true",
+  "spark.sql.iceberg.merge-mode": "merge-on-read",
+  "spark.dynamicAllocation.maxExecutors": "4",
+  "spark.executor.cores": "2",
+  "spark.executor.memory": "4g",
+  "spark.driver.cores": "2",
+  "spark.driver.memory": "4g"
+}
