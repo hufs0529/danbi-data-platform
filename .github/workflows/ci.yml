@@ -29,9 +29,9 @@ jobs:
           distribution: temurin
           java-version: "21"
       - run: pip install -e '.[dev]'
-      - run: ruff check .
-      - run: ruff format --check .
-      - run: pytest -q
+      - run: ruff check p1 libs contracts scripts
+      - run: ruff format --check p1 libs contracts scripts
+      - run: pytest -q p1 libs contracts scripts
       - name: 데이터 계약 거버넌스(분류·보존 근거·소스 컬럼 전수 매핑)
         run: python -m contracts.governance
       - name: 접근 요청 검사(승인자 2명, 30일, 허용 범위)
@@ -59,7 +59,8 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install 'dbt-core==1.12.*' 'dbt-athena-community==1.11.*'
-      - run: dbt parse --no-partial-parse --warn-error-options '{"error": ["NoNodesForSelectionCriteria"]}'
+      - run: |
+          dbt parse --no-partial-parse --warn-error-options '{"error": ["NoNodesForSelectionCriteria"]}'
 
   airflow:
     # 실제 Airflow 로 DAG 를 읽어 import 오류·순환·잘못된 연산자 사용을 잡는다(MWAA 와 같은 3.x 라인)
@@ -93,8 +94,11 @@ jobs:
         with:
           directory: infra
           config_file: .checkov.yaml
-          # 기존 지적은 기준선에 기록, 새 지적만 실패시킨다(재생성: checkov -d infra --config-file .checkov.yaml --create-baseline)
+          # P1 범위만 검사. 기존 지적은 기준선에 기록하고 새 지적만 실패시킨다
+          # 기준선 재생성: checkov -d infra --config-file .checkov.yaml --skip-path 'stacks/p[23]-' --create-baseline
+          skip_path: stacks/p[23]-
           baseline: infra/.checkov.baseline
+          # 기존 지적은 기준선에 기록, 새 지적만 실패시킨다(재생성: checkov -d infra --config-file .checkov.yaml --create-baseline)
 
   plan:
     # PR 에서 바뀐 스택만 plan 한다. 결과는 잡 요약(Step Summary)에 남긴다.

@@ -1,0 +1,39 @@
+name: eval
+
+# P2 평가 게이트(P2-12): 검색 품질 회귀·권한 누수·레드팀·만료 문서 인용.
+# 운영 코드 경로를 moto·메모리 백엔드로 그대로 돌린다(배포 없이, 비밀 없이).
+on:
+  workflow_dispatch:   # P2 는 범위 밖 — 자동 실행하지 않는다
+
+permissions:
+  contents: read
+
+concurrency:
+  group: eval-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  knowledge-lake:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: 한국어 OCR(스캔 PDF 경로 시험)
+        run: sudo apt-get update -q && sudo apt-get install -y -q tesseract-ocr tesseract-ocr-kor
+      - run: pip install -e '.[dev]'
+      - name: 평가 하네스(기준선 대비)
+        id: eval
+        run: python -m p2.eval.harness run --baseline p2/eval/baseline.json --out out/eval
+      - name: 요약
+        if: always()
+        run: test -f out/eval/report.md && cat out/eval/report.md >> "$GITHUB_STEP_SUMMARY" || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: kl-eval-report
+          path: out/eval/
+          retention-days: 30
