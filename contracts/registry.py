@@ -97,8 +97,10 @@ class Contract:
         return None
 
 
-def _parse(text: str) -> Contract:
+def _parse(text: str) -> Contract | None:
     d = yaml.safe_load(text)
+    if not isinstance(d, dict) or "dataset" not in d:
+        return None  # 계약이 아닌 보조 파일(unmapped.yaml 등)
     cols = tuple(
         Column(c["name"], c["type"], c["classification"], c.get("source"), c.get("transform"), c.get("derive"),
                c.get("description", ""), tuple(c.get("accepted_values", [])))
@@ -123,13 +125,14 @@ def _yaml_files(node) -> list:
 def load_all(root: Path | None = None) -> tuple[Contract, ...]:
     """계약 전부. Spark 잡은 zip(--py-files) 안에서 돌므로 파일 시스템 대신 importlib.resources 로 읽는다."""
     if root is not None:
-        return tuple(_parse(p.read_text(encoding="utf-8")) for p in sorted(root.glob("p*/**/*.yaml")))
+        parsed = (_parse(p.read_text(encoding="utf-8")) for p in sorted(root.glob("p*/**/*.yaml")))
+        return tuple(c for c in parsed if c is not None)
     from importlib import resources
 
     base = resources.files("contracts")
     files = sorted((f for d in base.iterdir() if d.is_dir() and d.name.startswith("p") for f in _yaml_files(d)),
                    key=lambda f: str(f))  # fmt: skip
-    return tuple(_parse(f.read_text(encoding="utf-8")) for f in files)
+    return tuple(c for c in (_parse(f.read_text(encoding="utf-8")) for f in files) if c is not None)
 
 
 def get(dataset: str) -> Contract:

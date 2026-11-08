@@ -1,0 +1,12 @@
+# 소스 컬럼 중 레이크에 일부러 들이지 않는 것(또는 아직 계약이 없는 것)과 그 이유.
+# CI 가 "소스의 모든 컬럼은 계약에 있거나 여기 있어야 한다"를 검사한다 → 새 컬럼이 조용히 들어오지 않는다
+commerce.member_addresses.created_at: updated_at 으로 충분(분석 수요 없음)
+commerce.products.created_at: 분석 수요 없음
+commerce.product_prices.updated_at: SCD2 유효 시작은 소스 커밋 시각(_src_ts)을 쓴다(애플리케이션 시각은 신뢰하지 않음)
+commerce.coupons.updated_at: 쿠폰 정의 변경 이력은 운영 감사 범위(레이크 대상 아님)
+payment.outbox_events.*: 도메인 이벤트는 events.payment 토픽(silver.payment_events)으로 수집
+commerce.debezium_signal.*: CDC 제어용
+payment.debezium_signal.*: CDC 제어용
+payment.debezium_heartbeat.*: CDC 제어용
+commerce.schema_migrations.*: 운영 메타
+payment.schema_migrations.*: 운영 메타

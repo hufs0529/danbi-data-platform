@@ -24,6 +24,8 @@ models:
     description: "그레인: 결제 1건(실패 제외). 매입·취소 누적, 정산 예정일(23:30 KST 마감)"
     meta: {owner: team-payment-data, sla_kst: "07:00"}
     columns:
+      - name: member_token
+        meta: {classification: personal_token}
       - name: payment_key
         tests: [unique, not_null]
       - name: authorized_amount
@@ -59,9 +61,13 @@ models:
           - expression_is_true: {arguments: {expression: "conversion_rate between 0 and 1"}}
 
   - name: dim_member
-    description: 현재 회원 차원(암호문 컬럼 없음). 출생연대·시군구 조합은 재식별 위험 점검 대상(P1-13)
+    description: >-
+      현재 회원 차원(암호문 컬럼 없음). 테이블 전체를 restricted 로 두고, 분석가는 '마케팅 동의 회원'
+      행 필터(LF data cells filter)로만 본다 — 동의 범위 밖 마케팅 분석 금지(개인정보 보호법 제18조)
+    meta: {owner: team-marketing-data, classification: restricted}
     columns:
       - name: member_token
+        meta: {classification: personal_token}
         tests: [unique, not_null]
 
   - name: dim_product

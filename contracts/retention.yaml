@@ -1,0 +1,24 @@
+# 보존 클래스 = 법적 근거가 있는 보존 기간. 계약의 retention.class 는 여기 있는 값만 쓸 수 있다.
+# (법률 자문 아님. 시행령 원문을 구현 시점에 다시 확인한다)
+classes:
+  ecommerce_transaction_5y:
+    days: 1826
+    basis: 전자상거래법 시행령 제6조 — 계약·청약철회, 대금결제·재화공급 기록 5년
+  ecommerce_dispute_3y:
+    days: 1096
+    basis: 전자상거래법 시행령 제6조 — 소비자 불만·분쟁처리 기록 3년
+  ecommerce_ad_6m_min:
+    days: 183
+    basis: 전자상거래법 시행령 제6조 — 표시·광고 기록 6개월(최소). 가격 이력은 분석 목적상 더 둘 수 있으나 PII 없음
+  member_until_withdrawal:
+    days: null
+    basis: 개인정보 보호법 제21조 — 목적 달성(탈퇴) 시 지체 없이(5일 이내) 파기. 거래 기록은 분리 보관
+  behavior_1y:
+    days: 365
+    basis: 내부 정책 — 행태 정보(클릭) 1년, 이후 집계만 보존
+  business_record:
+    days: null
+    basis: 개인정보 없음 — 업무 기록으로 보존
+  access_log_2y:
+    days: 730
+    basis: 개인정보의 안전성 확보조치 기준 제8조 — 5만 명 이상 처리 시 접속기록 2년 이상

@@ -1,0 +1,10 @@
+id: 2026-10-30-example-cohort
+principal_arn: arn:aws:iam::000000000000:role/danbi-dev-analyst
+requester: analyst@danbi.example
+reason: 예시 요청 — VIP 이탈 코호트 분석(회원 토큰 조인). 실제 계정 ID 로 바꿔 쓴다
+approved_by: [owner@danbi.example, security@danbi.example]
+ticket: DATA-0001
+scope:
+  layer: [gold]
+  classification: [personal_token]
+expires_at: "2026-11-29T00:00:00Z"
