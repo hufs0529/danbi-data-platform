@@ -1,0 +1,14 @@
+# MSK Connect 워커 설정 (커넥터 2개가 공유)
+key.converter=io.confluent.connect.avro.AvroConverter
+key.converter.schema.registry.url=${schema_registry_url}
+value.converter=io.confluent.connect.avro.AvroConverter
+value.converter.schema.registry.url=${schema_registry_url}
+
+# 기본값이면 커넥터마다 __amazon_msk_connect_offsets_<커넥터명>_<id> 가 새로 생겨,
+# 커넥터를 지우고 다시 만들면 오프셋을 잃고 처음부터 스냅샷한다. 이름을 고정해 이어받는다.
+offset.storage.topic=connect.offsets.cdc
+
+# 비밀은 커넥터 설정에 평문으로 두지 않고 실행 시점에 Secrets Manager 에서 읽는다
+config.providers=secretsmanager
+config.providers.secretsmanager.class=com.amazonaws.kafka.config.providers.SecretsManagerConfigProvider
+config.providers.secretsmanager.param.region=${region}

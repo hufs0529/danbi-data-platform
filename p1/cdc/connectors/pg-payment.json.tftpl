@@ -1,0 +1,46 @@
+{
+  "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+  "tasks.max": "1",
+
+  "database.hostname": "${pg_host}",
+  "database.port": "5432",
+  "database.dbname": "payment",
+  "database.user": "$${secretsmanager:${secret_prefix}postgres/debezium:username}",
+  "database.password": "$${secretsmanager:${secret_prefix}postgres/debezium:password}",
+  "database.sslmode": "require",
+
+  "plugin.name": "pgoutput",
+  "slot.name": "debezium_payment",
+  "slot.drop.on.stop": "false",
+  "publication.name": "dbz_publication",
+  "publication.autocreate.mode": "disabled",
+
+  "topic.prefix": "cdc.pg",
+  "table.include.list": "public.payments,public.payment_status_history,public.refunds,public.outbox_events,public.debezium_signal",
+
+  "snapshot.mode": "initial",
+  "tombstones.on.delete": "false",
+  "decimal.handling.mode": "string",
+
+  "heartbeat.interval.ms": "10000",
+  "heartbeat.action.query": "UPDATE debezium_heartbeat SET ts = now() WHERE id = 1",
+
+  "signal.enabled.channels": "source",
+  "signal.data.collection": "public.debezium_signal",
+  "incremental.snapshot.chunk.size": "2048",
+
+  "transforms": "outbox",
+  "transforms.outbox.type": "io.debezium.transforms.outbox.EventRouter",
+  "transforms.outbox.predicate": "isOutbox",
+  "transforms.outbox.route.by.field": "aggregatetype",
+  "transforms.outbox.route.topic.replacement": "events.$${routedByValue}",
+  "transforms.outbox.table.field.event.key": "aggregateid",
+  "transforms.outbox.table.fields.additional.placement": "type:envelope:eventType,occurred_at:envelope:occurredAt,id:header:eventId",
+  "transforms.outbox.table.expand.json.payload": "false",
+  "predicates": "isOutbox",
+  "predicates.isOutbox.type": "org.apache.kafka.connect.transforms.predicates.TopicNameMatches",
+  "predicates.isOutbox.pattern": "cdc\\.pg\\.public\\.outbox_events",
+
+  "errors.max.retries": "-1",
+  "event.processing.failure.handling.mode": "fail"
+}

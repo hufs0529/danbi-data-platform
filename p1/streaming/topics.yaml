@@ -87,3 +87,9 @@ topics:
     partitions: 3
     config:
       retention.ms: "604800000"
+
+  # ----- Debezium 하트비트(heartbeat.interval.ms). auto.create 가 꺼져 있어 없으면 커넥터 태스크가 멈춘다(P1-04 lint 가 검사)
+  - name: __debezium-heartbeat.cdc.mysql
+    partitions: 1
+  - name: __debezium-heartbeat.cdc.pg
+    partitions: 1

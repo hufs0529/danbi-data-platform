@@ -1,0 +1,42 @@
+{
+  "connector.class": "io.debezium.connector.mysql.MySqlConnector",
+  "tasks.max": "1",
+
+  "database.hostname": "${mysql_host}",
+  "database.port": "3306",
+  "database.user": "$${secretsmanager:${secret_prefix}mysql/debezium:username}",
+  "database.password": "$${secretsmanager:${secret_prefix}mysql/debezium:password}",
+  "database.server.id": "184054",
+  "database.ssl.mode": "required",
+
+  "topic.prefix": "cdc.mysql",
+  "database.include.list": "commerce",
+  "table.include.list": "commerce.members,commerce.member_addresses,commerce.products,commerce.product_prices,commerce.coupons,commerce.orders,commerce.order_items,commerce.coupon_usages,commerce.cs_tickets,commerce.debezium_signal",
+
+  "snapshot.mode": "initial",
+  "snapshot.locking.mode": "none",
+  "include.schema.changes": "false",
+  "tombstones.on.delete": "false",
+  "decimal.handling.mode": "string",
+  "bigint.unsigned.handling.mode": "long",
+
+  "signal.enabled.channels": "source",
+  "signal.data.collection": "commerce.debezium_signal",
+  "incremental.snapshot.chunk.size": "2048",
+  "heartbeat.interval.ms": "10000",
+
+  "schema.history.internal.kafka.bootstrap.servers": "${bootstrap}",
+  "schema.history.internal.kafka.topic": "schemahistory.mysql.commerce",
+  "schema.history.internal.store.only.captured.tables.ddl": "true",
+  "schema.history.internal.producer.security.protocol": "SASL_SSL",
+  "schema.history.internal.producer.sasl.mechanism": "AWS_MSK_IAM",
+  "schema.history.internal.producer.sasl.jaas.config": "software.amazon.msk.auth.iam.IAMLoginModule required;",
+  "schema.history.internal.producer.sasl.client.callback.handler.class": "software.amazon.msk.auth.iam.IAMClientCallbackHandler",
+  "schema.history.internal.consumer.security.protocol": "SASL_SSL",
+  "schema.history.internal.consumer.sasl.mechanism": "AWS_MSK_IAM",
+  "schema.history.internal.consumer.sasl.jaas.config": "software.amazon.msk.auth.iam.IAMLoginModule required;",
+  "schema.history.internal.consumer.sasl.client.callback.handler.class": "software.amazon.msk.auth.iam.IAMClientCallbackHandler",
+
+  "errors.max.retries": "-1",
+  "event.processing.failure.handling.mode": "fail"
+}
