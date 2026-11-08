@@ -1,0 +1,21 @@
+{
+  "type": "record",
+  "name": "ClickEvent",
+  "namespace": "com.danbi.clicks",
+  "doc": "웹·앱 클릭스트림. 토픽 clicks.raw. event_type 은 enum 대신 string(+계약의 허용값) — enum 심볼 추가는 BACKWARD 호환이 아니어서 소비자가 깨진다",
+  "fields": [
+    {"name": "event_id", "type": "string", "doc": "클라이언트가 만든 UUID. 중복 제거 키"},
+    {"name": "event_type", "type": "string", "doc": "page_view, search, add_to_cart, checkout_start, purchase"},
+    {"name": "session_id", "type": "string"},
+    {"name": "member_id", "type": ["null", "long"], "default": null, "doc": "PII(개인 식별자). Bronze 이전에 토큰화"},
+    {"name": "device_id", "type": "string", "doc": "PII(기기 식별자). Bronze 이전에 토큰화"},
+    {"name": "platform", "type": "string"},
+    {"name": "page", "type": ["null", "string"], "default": null},
+    {"name": "product_id", "type": ["null", "long"], "default": null},
+    {"name": "search_query", "type": ["null", "string"], "default": null, "doc": "자유 텍스트. PII 탐지·마스킹 대상"},
+    {"name": "order_no", "type": ["null", "string"], "default": null},
+    {"name": "user_agent", "type": "string"},
+    {"name": "event_time", "type": {"type": "long", "logicalType": "timestamp-millis"}, "doc": "기기에서 발생한 시각(이벤트 시간)"},
+    {"name": "sent_time", "type": {"type": "long", "logicalType": "timestamp-millis"}, "doc": "서버로 보낸 시각. event_time 과의 차이로 지연 전송을 판단"}
+  ]
+}
