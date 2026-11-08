@@ -1,0 +1,92 @@
+# SLO·알림 단일 원본. Terraform(p1-70-observability)이 알람을, slo_report.py 가 월간 달성률·에러 버짓을 만든다.
+# 알림은 '증상'(사용자가 겪는 것)에 건다. 원인 지표(브로커 CPU 등)는 대시보드에만 둔다.
+# 모든 알림에는 런북이 있어야 한다(새벽 3시에 런북만 보고 30분 안에 판단).
+
+slos:
+  - id: silver_orders_freshness
+    product: silver.orders
+    sli: 마지막 커밋 경과 시간
+    objective: "시간의 99%가 15분 이내 (30일)"
+    target_ratio: 0.99
+    metric: {namespace: Danbi/Freshness, name: FreshnessSeconds, dimensions: {Table: silver.orders}}
+    good_when: "<= 900"
+    alarm: {threshold: 1800, periods: 2, period: 300, comparison: GreaterThanThreshold}
+    runbook: silver-freshness.md
+
+  - id: bronze_ingest_freshness
+    product: bronze.cdc_events
+    sli: 마지막 커밋 경과 시간(수집 잡 체크포인트 주기 15초)
+    objective: "시간의 99%가 2분 이내"
+    target_ratio: 0.99
+    metric: {namespace: Danbi/Freshness, name: FreshnessSeconds, dimensions: {Table: bronze.cdc_events}}
+    good_when: "<= 120"
+    alarm: {threshold: 600, periods: 1, period: 300, comparison: GreaterThanThreshold}
+    runbook: ingest-stalled.md
+
+  - id: rt_sales_freshness
+    product: rt.sales_1m
+    sli: 이벤트 → 집계 반영 지연
+    objective: "99%의 분이 90초 이내"
+    target_ratio: 0.99
+    metric: {namespace: Danbi/Freshness, name: FreshnessSeconds, dimensions: {Table: rt.sales_1m}}
+    good_when: "<= 180"
+    alarm: {threshold: 300, periods: 5, period: 60, comparison: GreaterThanThreshold}
+    runbook: realtime-lag.md
+
+  - id: gold_daily_publish
+    product: gold.mart_daily_sales
+    sli: 게시 시각
+    objective: "30일 중 29일은 07:00 KST 이전"
+    target_ratio: 0.966
+    metric: {namespace: Danbi/Freshness, name: GoldDeadlineBreached, dimensions: {Table: gold.mart_daily_sales}}
+    good_when: "== 0"
+    alarm: {threshold: 0, periods: 1, period: 300, comparison: GreaterThanThreshold}
+    runbook: gold-publish.md
+
+  - id: recon_unexplained
+    product: gold.recon_pg_settlement
+    sli: 설명되지 않은 차이 건수
+    objective: "0건 유지"
+    target_ratio: 1.0
+    metric: {namespace: Danbi/Recon, name: UnexplainedCount, dimensions: {Feed: pg_settlement}}
+    good_when: "== 0"
+    alarm: {threshold: 0, periods: 1, period: 300, comparison: GreaterThanThreshold}
+    runbook: pg-settlement.md
+
+alerts:   # SLO 는 아니지만 바로 사람이 봐야 하는 증상
+  - id: cdc_connector_down
+    metric: {namespace: Danbi/Pipeline, name: ConnectorRunning, dimensions: {}}
+    statistic: Minimum
+    alarm: {threshold: 1, periods: 1, period: 300, comparison: LessThanThreshold}
+    runbook: cdc-connector-down.md
+    note: F-01 알림 5분 내
+  - id: source_lake_mismatch
+    metric: {namespace: Danbi/Recon, name: SourceLakeMismatch, dimensions: {Feed: cdc}}
+    alarm: {threshold: 0, periods: 1, period: 3600, comparison: GreaterThanThreshold}
+    runbook: cdc-completeness.md
+  - id: ingest_consumer_lag
+    metric: {namespace: AWS/Kafka, name: EstimatedMaxTimeLag, dimensions: {"Consumer Group": flink-bronze-cdc}}
+    statistic: Maximum
+    alarm: {threshold: 60, periods: 3, period: 60, comparison: GreaterThanThreshold}
+    runbook: ingest-stalled.md
+    note: NFR-06 컨슈머 지연 ≤ 60초(건수가 아니라 시간)
+  - id: dlq_inflow
+    metric: {namespace: Danbi/Pipeline, name: DlqMessages, dimensions: {Topic: dlq.ingest}}
+    statistic: Sum
+    alarm: {threshold: 0, periods: 1, period: 300, comparison: GreaterThanThreshold}
+    runbook: dlq.md
+  - id: small_files
+    metric: {namespace: Danbi/Lake, name: SmallFileRatio, dimensions: {Table: silver.orders}}
+    statistic: Maximum
+    alarm: {threshold: 0.1, periods: 1, period: 86400, comparison: GreaterThanThreshold}
+    runbook: small-files.md
+    note: NFR-11
+  - id: quarantined_files
+    metric: {namespace: Danbi/Recon, name: QuarantinedFiles, dimensions: {Feed: pg_settlement}}
+    statistic: Sum
+    alarm: {threshold: 0, periods: 1, period: 300, comparison: GreaterThanThreshold}
+    runbook: pg-settlement.md
+
+monitored_tables: [bronze.cdc_events, bronze.clicks, silver.orders, silver.payments, silver.payment_status_history,
+                   silver.members, silver.events_clean, gold.mart_daily_sales, gold.fct_payments, rt.sales_1m]
+small_file_tables: [silver.orders, silver.order_items, silver.payments, bronze.cdc_events]

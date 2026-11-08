@@ -13,10 +13,19 @@ import json
 import os
 
 
+def dlq_count(event: dict) -> int:
+    """DLQ 는 원문(개인정보 포함 가능)이 들어 있다 → 내용은 읽지 않고 건수만 센다(P1-14 DlqMessages 알림)."""
+    return sum(
+        len(rs) for k, rs in (event.get("records") or {}).items() if k.rsplit("-", 1)[0] == "dlq.ingest"
+    )
+
+
 def parse(event: dict) -> tuple[list[dict], list[dict]]:
     alerts, sales, seen = [], [], set()
     for key, records in (event.get("records") or {}).items():
         topic = key.rsplit("-", 1)[0]
+        if topic == "dlq.ingest":
+            continue
         for r in records:
             try:
                 body = json.loads(base64.b64decode(r["value"]))
@@ -52,6 +61,9 @@ def handler(event, _context):
             sns.publish(TopicArn=os.environ["RISK_TOPIC_ARN"], Subject="[이상결제] 동일 카드 다중 배송지",
                         Message=json.dumps(a, ensure_ascii=False, indent=1),
                         MessageAttributes={"alert_id": {"DataType": "String", "StringValue": a["alert_id"]}})  # fmt: skip
+    if n := dlq_count(event):
+        boto3.client("cloudwatch").put_metric_data(Namespace="Danbi/Pipeline", MetricData=[
+            {"MetricName": "DlqMessages", "Dimensions": [{"Name": "Topic", "Value": "dlq.ingest"}], "Value": n}])  # fmt: skip
     data = metric_data(sales)
     if data:
         cw = boto3.client("cloudwatch")

@@ -94,3 +94,9 @@ def test_lambda_parse_and_metrics():
     assert len(alerts) == 1 and len(sales) == 1
     data = {d["MetricName"]: d["Value"] for d in alert_lambda.metric_data(sales)}
     assert data["NetSales1m"] == 7000.0 and data["Payments1m"] == 2.0
+
+
+def test_lambda_counts_dlq_without_reading_payload():
+    event = {"records": {"dlq.ingest-0": [{"value": "not-even-json"}, {"value": "x"}]}}
+    assert alert_lambda.dlq_count(event) == 2
+    assert alert_lambda.parse(event) == ([], [])
