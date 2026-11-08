@@ -1,7 +1,7 @@
 from contracts.registry import get
 from p1.lakehouse.migrate import alter_sql, plan_contract, render_sql_files
 
-BUCKETS = {"bronze_bucket": "b", "silver_bucket": "s", "gold_bucket": "g"}
+BUCKETS = {"bronze_bucket": "b", "silver_bucket": "s", "gold_bucket": "g", "retention_bucket": "r"}
 
 
 def test_sql_files_render_with_buckets():

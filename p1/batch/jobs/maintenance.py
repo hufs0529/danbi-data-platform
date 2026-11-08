@@ -25,10 +25,18 @@ def tables(spark) -> list[str]:
     return out
 
 
-def maintenance_sql(table: str, now: dt.datetime, snapshot_days: int = 7, orphan_days: int = 3) -> list[str]:
+def maintenance_sql(table: str, now: dt.datetime, snapshot_days: int = 7, orphan_days: int = 3,
+                    retain_last: int = 20, expire_only: bool = False) -> list[str]:  # fmt: skip
+    """expire_only: 파기(P1-13) 직후 — 삭제된 행이 남은 과거 스냅샷·파일을 지금 바로 물리 삭제한다."""
     older = (now - dt.timedelta(days=snapshot_days)).strftime("%Y-%m-%d %H:%M:%S")
     orphan = (now - dt.timedelta(days=orphan_days)).strftime("%Y-%m-%d %H:%M:%S")
-    stmts = []
+    stmts: list[str] = []
+    if expire_only:
+        return [
+            f"CALL {CATALOG}.system.expire_snapshots(table => '{table}', older_than => TIMESTAMP '{older}', "
+            f"retain_last => {retain_last})",
+            f"CALL {CATALOG}.system.remove_orphan_files(table => '{table}', older_than => TIMESTAMP '{orphan}')",
+        ]
     if table in BRONZE_RETENTION_DAYS:
         cutoff = (now - dt.timedelta(days=BRONZE_RETENTION_DAYS[table])).strftime("%Y-%m-%d %H:%M:%S")
         stmts.append(f"DELETE FROM {CATALOG}.{table} WHERE ingest_ts < TIMESTAMP '{cutoff}'")
@@ -37,7 +45,7 @@ def maintenance_sql(table: str, now: dt.datetime, snapshot_days: int = 7, orphan
         f"options => map('min-input-files', '5', 'target-file-size-bytes', '{TARGET_FILE_BYTES}', "
         f"'delete-file-threshold', '10', 'partial-progress.enabled', 'true'))",
         f"CALL {CATALOG}.system.expire_snapshots(table => '{table}', older_than => TIMESTAMP '{older}', "
-        f"retain_last => 20)",
+        f"retain_last => {retain_last})",
         f"CALL {CATALOG}.system.remove_orphan_files(table => '{table}', older_than => TIMESTAMP '{orphan}')",
         f"CALL {CATALOG}.system.rewrite_manifests(table => '{table}')",
     ]
@@ -48,12 +56,17 @@ def main(argv: list[str] | None = None) -> None:
     p = argparse.ArgumentParser()
     p.add_argument("--tables", default="all")
     p.add_argument("--snapshot-days", type=int, default=7)
+    p.add_argument("--orphan-days", type=int, default=3)
+    p.add_argument("--retain-last", type=int, default=20)
+    p.add_argument("--expire-only", action="store_true")
     args = p.parse_args(argv)
     spark = session("iceberg-maintenance")
     targets = tables(spark) if args.tables == "all" else args.tables.split(",")
     now = dt.datetime.now(dt.UTC).replace(tzinfo=None)
     for t in targets:
-        for sql in maintenance_sql(t, now, args.snapshot_days):
+        for sql in maintenance_sql(
+            t, now, args.snapshot_days, args.orphan_days, args.retain_last, args.expire_only
+        ):
             print(f"[{t}] {sql[:120]}")
             for row in spark.sql(sql).collect():
                 print(f"    {row.asDict()}")

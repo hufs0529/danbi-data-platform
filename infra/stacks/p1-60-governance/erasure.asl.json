@@ -1,0 +1,158 @@
+{
+  "Comment": "회원 탈퇴 파기(S-G4): 판정 → 분리 보관 → 키 폐기 → 일반 영역 삭제·가명화 → Bronze 삭제 → 스냅샷 만료 → 검증 → 파생물 전파 → 대장",
+  "TimeoutSeconds": 259200,
+  "StartAt": "LedgerStart",
+  "States": {
+    "LedgerStart": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::dynamodb:putItem",
+      "Parameters": {
+        "TableName": "${ledger_table}",
+        "Item": {
+          "request_id": {"S.$": "$.request_id"},
+          "member_token": {"S.$": "$.member_token"},
+          "status": {"S": "STARTED"},
+          "started_at": {"S.$": "$$.State.EnteredTime"},
+          "execution": {"S.$": "$$.Execution.Id"}
+        }
+      },
+      "ResultPath": null,
+      "Next": "Assess"
+    },
+    "Assess": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {"FunctionName": "${lambda_arn}", "Payload": {"step": "assess", "request_id.$": "$.request_id", "member_token.$": "$.member_token"}},
+      "ResultSelector": {"result.$": "$.Payload"},
+      "ResultPath": "$.assess",
+      "Retry": [{"ErrorEquals": ["States.TaskFailed", "Lambda.ServiceException"], "IntervalSeconds": 30, "MaxAttempts": 3, "BackoffRate": 2}],
+      "Catch": [{"ErrorEquals": ["States.ALL"], "ResultPath": "$.error", "Next": "LedgerFailed"}],
+      "Next": "NeedsRetention"
+    },
+    "NeedsRetention": {
+      "Type": "Choice",
+      "Choices": [{"Variable": "$.assess.result.needs_retention", "BooleanEquals": true, "Next": "Retain"}],
+      "Default": "Shred"
+    },
+    "Retain": {
+      "Type": "Task",
+      "Comment": "거래 기록(5년)·분쟁 기록(3년)을 분리 보관소(별도 버킷·별도 키)로. 일반 영역보다 먼저",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {"FunctionName": "${lambda_arn}", "Payload": {"step": "retain", "request_id.$": "$.request_id", "member_token.$": "$.member_token"}},
+      "ResultPath": null,
+      "Retry": [{"ErrorEquals": ["States.TaskFailed"], "IntervalSeconds": 60, "MaxAttempts": 3, "BackoffRate": 2}],
+      "Catch": [{"ErrorEquals": ["States.ALL"], "ResultPath": "$.error", "Next": "LedgerFailed"}],
+      "Next": "Shred"
+    },
+    "Shred": {
+      "Type": "Task",
+      "Comment": "회원 키 폐기(묘비). 이 순간부터 모든 계층·스냅샷·백업의 암호문을 읽을 수 없다",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {"FunctionName": "${lambda_arn}", "Payload": {"step": "shred", "request_id.$": "$.request_id", "member_token.$": "$.member_token"}},
+      "ResultPath": null,
+      "Retry": [{"ErrorEquals": ["States.TaskFailed"], "IntervalSeconds": 10, "MaxAttempts": 5, "BackoffRate": 2}],
+      "Catch": [{"ErrorEquals": ["States.ALL"], "ResultPath": "$.error", "Next": "LedgerFailed"}],
+      "Next": "Erase"
+    },
+    "Erase": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {"FunctionName": "${lambda_arn}", "Payload": {"step": "erase", "request_id.$": "$.request_id", "member_token.$": "$.member_token"}},
+      "ResultPath": null,
+      "Retry": [{"ErrorEquals": ["States.TaskFailed"], "IntervalSeconds": 120, "MaxAttempts": 5, "BackoffRate": 2}],
+      "Catch": [{"ErrorEquals": ["States.ALL"], "ResultPath": "$.error", "Next": "LedgerFailed"}],
+      "Next": "Bronze"
+    },
+    "Bronze": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {"FunctionName": "${lambda_arn}", "Payload": {"step": "bronze", "request_id.$": "$.request_id", "member_token.$": "$.member_token"}},
+      "ResultPath": null,
+      "Retry": [{"ErrorEquals": ["States.TaskFailed"], "IntervalSeconds": 120, "MaxAttempts": 5, "BackoffRate": 2}],
+      "Catch": [{"ErrorEquals": ["States.ALL"], "ResultPath": "$.error", "Next": "LedgerFailed"}],
+      "Next": "ExpireSnapshots"
+    },
+    "ExpireSnapshots": {
+      "Type": "Task",
+      "Comment": "삭제 전 행이 남은 과거 스냅샷·데이터 파일을 물리 삭제(시간 여행 범위가 사라지는 것을 감수)",
+      "Resource": "arn:aws:states:::emr-serverless:startJobRun.sync",
+      "Parameters": {
+        "ApplicationId": "${emr_app_id}",
+        "ExecutionRoleArn": "${emr_role_arn}",
+        "Name.$": "States.Format('erasure-expire-{}', $.request_id)",
+        "JobDriver": {"SparkSubmit": {
+          "EntryPoint": "${spark_entry}",
+          "EntryPointArguments": ["--tables", "${erasure_tables}", "--snapshot-days", "0", "--retain-last", "1", "--expire-only"],
+          "SparkSubmitParameters": "${spark_params}"
+        }},
+        "ConfigurationOverrides": {"MonitoringConfiguration": {"S3MonitoringConfiguration": {"LogUri": "${emr_log_uri}"}}}
+      },
+      "ResultPath": null,
+      "Retry": [{"ErrorEquals": ["States.ALL"], "IntervalSeconds": 600, "MaxAttempts": 3, "BackoffRate": 2}],
+      "Catch": [{"ErrorEquals": ["States.ALL"], "ResultPath": "$.error", "Next": "LedgerFailed"}],
+      "Next": "Verify"
+    },
+    "Verify": {
+      "Type": "Task",
+      "Comment": "회원 토큰으로 전 계층을 검색해 0건 확인",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {"FunctionName": "${lambda_arn}", "Payload": {"step": "verify", "request_id.$": "$.request_id", "member_token.$": "$.member_token"}},
+      "ResultSelector": {"result.$": "$.Payload"},
+      "ResultPath": "$.verify",
+      "Retry": [{"ErrorEquals": ["States.TaskFailed"], "IntervalSeconds": 300, "MaxAttempts": 2, "BackoffRate": 2}],
+      "Catch": [{"ErrorEquals": ["States.ALL"], "ResultPath": "$.error", "Next": "LedgerFailed"}],
+      "Next": "Propagate"
+    },
+    "Propagate": {
+      "Type": "Task",
+      "Comment": "파생물(P2 검색 인덱스·마케팅 세그먼트·캐시)에 삭제 전파",
+      "Resource": "arn:aws:states:::events:putEvents",
+      "Parameters": {"Entries": [{
+        "Source": "danbi.privacy",
+        "DetailType": "member.erased",
+        "EventBusName": "default",
+        "Detail": {"request_id.$": "$.request_id", "member_token.$": "$.member_token"}
+      }]},
+      "ResultPath": null,
+      "Next": "LedgerDone"
+    },
+    "LedgerDone": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::dynamodb:updateItem",
+      "Parameters": {
+        "TableName": "${ledger_table}",
+        "Key": {"request_id": {"S.$": "$.request_id"}},
+        "UpdateExpression": "SET #s = :s, verified_at = :t, retained = :r",
+        "ExpressionAttributeNames": {"#s": "status"},
+        "ExpressionAttributeValues": {":s": {"S": "VERIFIED"}, ":t": {"S.$": "$$.State.EnteredTime"}, ":r": {"S.$": "States.JsonToString($.assess.result)"}}
+      },
+      "ResultPath": null,
+      "End": true
+    },
+    "LedgerFailed": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::dynamodb:updateItem",
+      "Parameters": {
+        "TableName": "${ledger_table}",
+        "Key": {"request_id": {"S.$": "$.request_id"}},
+        "UpdateExpression": "SET #s = :s, failed_at = :t, error_info = :e",
+        "ExpressionAttributeNames": {"#s": "status"},
+        "ExpressionAttributeValues": {":s": {"S": "FAILED"}, ":t": {"S.$": "$$.State.EnteredTime"}, ":e": {"S.$": "States.JsonToString($.error)"}}
+      },
+      "ResultPath": null,
+      "Next": "Alert"
+    },
+    "Alert": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::sns:publish",
+      "Parameters": {
+        "TopicArn": "${alerts_topic_arn}",
+        "Subject": "[개인정보] 파기 실패",
+        "Message.$": "States.Format('request={} — 대장 확인 후 같은 이름으로 재실행(멱등). runbook: docs/runbooks/erasure.md', $.request_id)"
+      },
+      "ResultPath": null,
+      "Next": "Failed"
+    },
+    "Failed": {"Type": "Fail", "Error": "ErasureFailed"}
+  }
+}

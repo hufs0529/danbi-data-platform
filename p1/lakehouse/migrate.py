@@ -110,6 +110,10 @@ def main(argv: list[str] | None = None) -> int:
 
     prefix = f"/{args.project}/{args.env}/p1/lakehouse"
     buckets = {k: get_parameter(f"{prefix}/{k}") for k in ("bronze_bucket", "silver_bucket", "gold_bucket")}
+    try:  # 분리 보관소는 거버넌스 스택(p1-60)에서 생긴다
+        buckets["retention_bucket"] = get_parameter(f"/{args.project}/{args.env}/p1/privacy/retention_bucket")
+    except Exception:
+        buckets["retention_bucket"] = None
     wg = get_parameter(f"{prefix}/workgroup_pipeline")
     glue = boto3.client("glue")
 
@@ -122,6 +126,11 @@ def main(argv: list[str] | None = None) -> int:
         applied = {r[0]: r[1] for r in q("SELECT version, checksum FROM ops.schema_migrations").rows}
     rc = 0
     for version, checksum, stmts in render_sql_files(buckets):
+        if any("{" in s or "None" in s for s in stmts) or (
+            buckets.get("retention_bucket") is None and "retention." in " ".join(stmts)
+        ):
+            print(f"- skip {version}: 필요한 버킷이 아직 없다")
+            continue
         if version in applied:
             if applied[version] != checksum:
                 print(f"! {version}: 적용 후 파일이 바뀌었다. 새 번호로 추가한다")
