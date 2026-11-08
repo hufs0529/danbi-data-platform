@@ -5,6 +5,8 @@
 *.tfplan
 tfplan
 crash.log
+# 잠금 파일은 첫 `terraform init` 후 각자 환경에서 생성해 커밋한다(이 저장소는 OpenTofu 미러로 검증해 잠금 파일을 싣지 않았다)
+.terraform.lock.hcl
 .terraform.lock.hcl.bak
 infra/backend.hcl
 *.auto.tfvars
