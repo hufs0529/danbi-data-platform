@@ -1,0 +1,19 @@
+# checkov 설정. 건너뛰는 검사는 이유를 함께 적는다(리뷰어가 판단할 수 있게).
+framework:
+  - terraform
+skip-path:
+  - "**/tests/**"
+skip-check:
+  # 교차 리전 복제: 단일 리전 dev 환경. 운영이라면 감사 버킷부터 켠다
+  - CKV_AWS_144
+  # S3 서버 액세스 로깅: CloudTrail 데이터 이벤트로 대체(PII 버킷에 한해)
+  - CKV_AWS_18
+  # S3 이벤트 알림 필수: 이벤트가 필요한 버킷만 EventBridge 를 켠다
+  - CKV2_AWS_62
+  # Lambda 동시 실행 한도·DLQ 필수: 함수별로 판단(웹훅·알림 Lambda 는 SQS 를 거친다)
+  - CKV_AWS_115
+  - CKV_AWS_116
+  # Lambda 코드 서명: 포트폴리오 범위 밖
+  - CKV_AWS_272
+  # RDS Multi-AZ: dev 비용. 운영은 켠다(p1-10-sources 변수)
+  - CKV_AWS_157
