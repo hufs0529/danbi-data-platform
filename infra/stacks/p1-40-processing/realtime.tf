@@ -141,7 +141,7 @@ data "aws_iam_policy_document" "alert_lambda" {
     condition {
       test     = "StringEquals"
       variable = "cloudwatch:namespace"
-      values   = ["Danbi/Realtime"]
+      values   = ["Danbi/Realtime", "Danbi/Pipeline"]
     }
   }
 }
@@ -172,7 +172,7 @@ resource "aws_lambda_function" "alerts" {
 }
 
 resource "aws_lambda_event_source_mapping" "rt" {
-  for_each          = data.aws_ssm_parameter.msk_arn.value == "disabled" ? toset([]) : toset(["alerts.fraud", "rt.sales_1m"])
+  for_each          = data.aws_ssm_parameter.msk_arn.value == "disabled" ? toset([]) : toset(["alerts.fraud", "rt.sales_1m", "dlq.ingest"])
   event_source_arn  = data.aws_ssm_parameter.msk_arn.value
   function_name     = aws_lambda_function.alerts.arn
   topics            = [each.key]
