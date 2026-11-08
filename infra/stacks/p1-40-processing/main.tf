@@ -117,7 +117,7 @@ data "aws_iam_policy_document" "flink" {
   }
   statement {
     sid     = "GlueBronzeRt"
-    actions = ["glue:GetDatabase", "glue:GetTable", "glue:GetTables", "glue:UpdateTable", "glue:GetPartitions"]
+    actions = ["glue:GetDatabase", "glue:GetTable", "glue:GetTables", "glue:UpdateTable", "glue:CreateTable", "glue:GetPartitions"]
     resources = [
       "arn:aws:glue:${var.region}:${local.account_id}:catalog",
       "arn:aws:glue:${var.region}:${local.account_id}:database/bronze",
