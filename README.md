@@ -48,6 +48,8 @@ make resume
 ## 로컬 검증
 
 ```bash
+pip install -e ".[dev]"
+export PYTHONPATH=.:libs   # p1·p2·libs 를 패키지로 import (pytest 는 pyproject 설정으로 자동)
 make lint      # ruff
 make test      # pytest (AWS 없이 도는 단위 테스트)
 make tf-fmt    # terraform fmt -check
