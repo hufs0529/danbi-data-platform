@@ -12,7 +12,7 @@ define var_files
 -var-file=$(ROOT)/infra/envs/$(ENV)/common.tfvars $(if $(wildcard infra/envs/$(ENV)/$(1).tfvars),-var-file=$(ROOT)/infra/envs/$(ENV)/$(1).tfvars,)
 endef
 
-.PHONY: help init plan apply destroy output pause resume lint test tf-fmt tf-validate validate-all gen-start gen-stop db-migrate topics schemas spark-job
+.PHONY: help init plan apply destroy output pause resume lint test tf-fmt tf-validate validate-all gen-start gen-stop db-migrate topics schemas spark-job recon
 
 help:
 	@echo "make init|plan|apply|destroy STACK=<name> [ENV=dev] [TF=terraform|tofu]"
@@ -119,3 +119,11 @@ spark-job:
 	  --job-driver '{"sparkSubmit":{"entryPoint":"$(call ssm,p1/processing/spark_entry_prefix)/$(JOB).py","entryPointArguments":[$(if $(ARGS),$(shell python3 -c 'import json,sys;print(",".join(json.dumps(a) for a in sys.argv[1:]))' $(ARGS)),)],"sparkSubmitParameters":"$(call ssm,p1/processing/spark_submit_params)"}}' \
 	  --configuration-overrides '{"monitoringConfiguration":{"s3MonitoringConfiguration":{"logUri":"$(call ssm,p1/processing/emr_log_uri)"}}}' \
 	  --query jobRunId --output text
+
+# 대사 잡 수동 실행: make recon CMD='["recon-pg","--date","2026-10-29"]'
+CMD ?= ["recon-pg"]
+recon:
+	aws ecs run-task --cluster $(call ssm,platform/ecs_cluster_name) \
+	  --task-definition $(call ssm,p1/lakehouse/recon_task_family) --launch-type FARGATE \
+	  --network-configuration "awsvpcConfiguration={subnets=[$(call ssm,network/app_subnet_ids)],securityGroups=[$(call ssm,p1/sources/db_clients_sg_id)]}" \
+	  --overrides '{"containerOverrides":[{"name":"app","command":$(CMD)}]}' --query 'tasks[0].taskArn' --output text
