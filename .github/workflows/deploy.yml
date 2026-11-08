@@ -1,0 +1,80 @@
+name: deploy
+
+# 수동 실행: 스택 하나를 plan → (승인) → apply 한다.
+# apply 잡은 GitHub environment "dev" 에서 돌고, environment 에 필수 승인자를 걸어 둔다.
+on:
+  workflow_dispatch:
+    inputs:
+      stack:
+        description: 적용할 스택
+        required: true
+        type: choice
+        options:
+          - 10-network
+          - 20-security
+          - 30-platform
+          - p1-10-sources
+          - p1-20-streaming
+          - p1-30-lakehouse
+          - p1-40-processing
+          - p1-50-orchestration
+          - p1-60-governance
+          - p1-70-observability
+          - p2-10-apps
+          - p2-20-knowledge
+          - p2-30-pipeline
+          - p2-40-serving
+          - p2-50-workflows
+      action:
+        description: plan 만 / plan 후 apply / destroy
+        required: true
+        type: choice
+        options: [plan, apply, destroy]
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: deploy-${{ inputs.stack }}
+  cancel-in-progress: false   # 같은 스택의 apply 가 겹치지 않게 줄 세운다
+
+env:
+  TF_VERSION: "1.13.4"
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    environment: dev
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_APPLY_ROLE_ARN }}
+          aws-region: ap-northeast-2
+      - name: backend.hcl
+        run: |
+          cat > infra/backend.hcl <<EOF
+          bucket       = "${{ vars.TF_STATE_BUCKET }}"
+          region       = "ap-northeast-2"
+          encrypt      = true
+          kms_key_id   = "${{ vars.TF_STATE_KMS_KEY_ARN }}"
+          use_lockfile = true
+          EOF
+      - run: make init STACK=${{ inputs.stack }}
+      - if: inputs.action != 'destroy'
+        run: |
+          make plan STACK=${{ inputs.stack }}
+          (cd infra/stacks/${{ inputs.stack }} && terraform show -no-color tfplan) > plan.txt
+          tail -n 120 plan.txt | sed 's/^/    /' >> "$GITHUB_STEP_SUMMARY"
+      - if: inputs.action == 'apply'
+        run: make apply STACK=${{ inputs.stack }}
+      - if: inputs.action == 'destroy'
+        run: |
+          cd infra/stacks/${{ inputs.stack }}
+          terraform destroy -auto-approve \
+            -var-file=../../envs/dev/common.tfvars \
+            $( [ -f ../../envs/dev/${{ inputs.stack }}.tfvars ] && echo -var-file=../../envs/dev/${{ inputs.stack }}.tfvars )

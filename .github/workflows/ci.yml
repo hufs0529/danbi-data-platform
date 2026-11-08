@@ -1,0 +1,113 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  TF_VERSION: "1.13.4"
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - uses: actions/setup-java@v4   # pyspark 단위 테스트(Silver 병합 로직)
+        with:
+          distribution: temurin
+          java-version: "21"
+      - run: pip install -e '.[dev]'
+      - run: ruff check .
+      - run: ruff format --check .
+      - run: pytest -q
+
+  terraform:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+      - name: fmt, validate, test (모든 스택·모듈)
+        run: ./scripts/tf_validate_all.sh terraform
+
+  checkov:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: bridgecrewio/checkov-action@v12
+        with:
+          directory: infra
+          config_file: .checkov.yaml
+
+  plan:
+    # PR 에서 바뀐 스택만 plan 한다. 결과는 잡 요약(Step Summary)에 남긴다.
+    if: github.event_name == 'pull_request' && vars.AWS_PLAN_ROLE_ARN != ''
+    needs: [terraform]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_PLAN_ROLE_ARN }}
+          aws-region: ap-northeast-2
+      - name: backend.hcl
+        run: |
+          cat > infra/backend.hcl <<EOF
+          bucket       = "${{ vars.TF_STATE_BUCKET }}"
+          region       = "ap-northeast-2"
+          encrypt      = true
+          kms_key_id   = "${{ vars.TF_STATE_KMS_KEY_ARN }}"
+          use_lockfile = true
+          EOF
+      - name: 바뀐 스택 plan
+        run: |
+          for s in $(python3 scripts/changed_stacks.py origin/${{ github.base_ref }}); do
+            echo "## plan: $s" >> "$GITHUB_STEP_SUMMARY"
+            make init STACK=$s
+            make plan STACK=$s
+            (cd infra/stacks/$s && terraform show -no-color tfplan | tail -n 80) | sed 's/^/    /' >> "$GITHUB_STEP_SUMMARY"
+          done
+
+  infracost:
+    # 비용 차이를 PR 코멘트로 남긴다(INFRACOST_API_KEY 가 있을 때만)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: 키 확인
+        id: key
+        run: echo "present=${{ secrets.INFRACOST_API_KEY != '' }}" >> "$GITHUB_OUTPUT"
+      - if: steps.key.outputs.present == 'true'
+        uses: infracost/actions/setup@v3
+        with:
+          api-key: ${{ secrets.INFRACOST_API_KEY }}
+      - if: steps.key.outputs.present == 'true'
+        run: |
+          infracost breakdown --path infra/stacks --format json --out-file /tmp/infracost.json \
+            --terraform-var-file ../../envs/dev/common.tfvars
+          infracost comment github --path /tmp/infracost.json --repo $GITHUB_REPOSITORY \
+            --github-token ${{ github.token }} --pull-request ${{ github.event.pull_request.number }} --behavior update
