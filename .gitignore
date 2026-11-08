@@ -1,0 +1,37 @@
+# Terraform
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+*.tfplan
+tfplan
+crash.log
+.terraform.lock.hcl.bak
+infra/backend.hcl
+*.auto.tfvars
+override.tf
+override.tf.json
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+
+# dbt
+p1/dbt/target/
+p1/dbt/dbt_packages/
+p1/dbt/logs/
+
+# 산출물
+*.zip
+!**/fixtures/**/*.zip
+.dist/
+out/
+
+# 로컬 비밀
+.env
+*.pem

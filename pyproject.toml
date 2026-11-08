@@ -1,0 +1,44 @@
+[project]
+name = "danbi-data-platform"
+version = "0.1.0"
+description = "단비마켓 데이터 플랫폼 (P1 CDC 레이크하우스, P2 Knowledge Lake) — AWS"
+requires-python = ">=3.11"
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8",
+  "ruff>=0.6",
+  "boto3>=1.35",
+  "moto[dynamodb,kms,s3,sqs,secretsmanager]>=5",
+  "pypdf>=5",
+  "python-docx>=1.1",
+  "lxml>=5",
+  "reportlab>=4",
+  "pyspark>=4.0",
+]
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"
+extend-exclude = ["p1/dbt", ".dist", "out"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "S", "SIM"]
+ignore = [
+  "S101",  # 테스트의 assert
+  "S608",  # Athena SQL은 식별자 화이트리스트로 조립한다
+  "E501",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"**/tests/**" = ["S105", "S106", "S311"]
+"p1/generator/**" = ["S311"]  # 합성 데이터는 암호학적 난수가 필요 없다
+"p2/corpus/**" = ["S311"]
+
+[tool.pytest.ini_options]
+testpaths = ["libs", "p1", "p2", "contracts", "scripts"]
+pythonpath = [".", "libs"]
+addopts = "-ra"
+markers = [
+  "spark: 로컬 Spark(JVM)가 필요한 테스트",
+]
