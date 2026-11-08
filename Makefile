@@ -12,7 +12,7 @@ define var_files
 -var-file=$(ROOT)/infra/envs/$(ENV)/common.tfvars $(if $(wildcard infra/envs/$(ENV)/$(1).tfvars),-var-file=$(ROOT)/infra/envs/$(ENV)/$(1).tfvars,)
 endef
 
-.PHONY: help init plan apply destroy output pause resume lint test tf-fmt tf-validate validate-all gen-start gen-stop db-migrate
+.PHONY: help init plan apply destroy output pause resume lint test tf-fmt tf-validate validate-all gen-start gen-stop db-migrate topics schemas
 
 help:
 	@echo "make init|plan|apply|destroy STACK=<name> [ENV=dev] [TF=terraform|tofu]"
@@ -93,3 +93,19 @@ db-migrate:
 	  --network-configuration "awsvpcConfiguration={subnets=[$(call ssm,network/app_subnet_ids)],securityGroups=[$(call ssm,p1/sources/db_clients_sg_id)]}" \
 	  --overrides '{"containerOverrides":[{"name":"app","command":["p1.sources.migrate","--engine","$(ENGINE)","--bootstrap-users"]}]}' \
 	  --query 'tasks[0].taskArn' --output text
+
+# 토픽 as code / 스키마 레지스트리 (ACTION=plan|apply, SR=config|check|register|list)
+ACTION ?= plan
+SR ?= check
+define run_admin
+	aws ecs run-task --cluster $(call ssm,platform/ecs_cluster_name) \
+	  --task-definition $(call ssm,p1/streaming/admin_task_family) --launch-type FARGATE \
+	  --network-configuration "awsvpcConfiguration={subnets=[$(call ssm,network/app_subnet_ids)],securityGroups=[$(call ssm,p1/sources/msk_clients_sg_id)]}" \
+	  --overrides '{"containerOverrides":[{"name":"app","command":$(1)}]}' --query 'tasks[0].taskArn' --output text
+endef
+
+topics:
+	$(call run_admin,["p1.streaming.topics","$(ACTION)"])
+
+schemas:
+	$(call run_admin,["p1.streaming.schema_registry.admin","$(SR)"])
