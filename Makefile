@@ -12,7 +12,7 @@ define var_files
 -var-file=$(ROOT)/infra/envs/$(ENV)/common.tfvars $(if $(wildcard infra/envs/$(ENV)/$(1).tfvars),-var-file=$(ROOT)/infra/envs/$(ENV)/$(1).tfvars,)
 endef
 
-.PHONY: help init plan apply destroy output pause resume lint test tf-fmt tf-validate validate-all
+.PHONY: help init plan apply destroy output pause resume lint test tf-fmt tf-validate validate-all gen-start gen-stop db-migrate
 
 help:
 	@echo "make init|plan|apply|destroy STACK=<name> [ENV=dev] [TF=terraform|tofu]"
@@ -71,3 +71,25 @@ tf-validate:
 	./scripts/tf_validate_all.sh $(TF)
 
 validate-all: lint test tf-fmt tf-validate
+
+# ---------------------------------------------------------------------------
+# P1 운영 단축 명령 (AWS CLI). 값은 SSM 파라미터에서 읽는다
+# ---------------------------------------------------------------------------
+P   := /danbi/$(ENV)
+ssm = $(shell aws ssm get-parameter --name $(P)/$(1) --query Parameter.Value --output text)
+
+# 생성기 켜기/끄기. Terraform 은 desired_count=0 이 기본이라 다음 apply 때 다시 꺼진다(켜 둔 채 잊는 비용 방지)
+gen-start:
+	aws ecs update-service --cluster $(call ssm,platform/ecs_cluster_name) --service $(call ssm,p1/generator/service_name) --desired-count 1 >/dev/null && echo started
+
+gen-stop:
+	aws ecs update-service --cluster $(call ssm,platform/ecs_cluster_name) --service $(call ssm,p1/generator/service_name) --desired-count 0 >/dev/null && echo stopped
+
+# 소스 DB 마이그레이션 + 앱 계정 생성(ENGINE=mysql|postgres). VPC 안에서 실행되므로 포트 포워딩이 필요 없다
+ENGINE ?= mysql
+db-migrate:
+	aws ecs run-task --cluster $(call ssm,platform/ecs_cluster_name) \
+	  --task-definition $(call ssm,p1/generator/migrate_task_family) --launch-type FARGATE \
+	  --network-configuration "awsvpcConfiguration={subnets=[$(call ssm,network/app_subnet_ids)],securityGroups=[$(call ssm,p1/sources/db_clients_sg_id)]}" \
+	  --overrides '{"containerOverrides":[{"name":"app","command":["p1.sources.migrate","--engine","$(ENGINE)","--bootstrap-users"]}]}' \
+	  --query 'tasks[0].taskArn' --output text

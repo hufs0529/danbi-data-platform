@@ -352,3 +352,151 @@ module "outputs" {
 output "endpoints" {
   value = { for k, db in aws_db_instance.this : k => db.address }
 }
+
+# ---------------------------------------------------------------------------
+# P1-02 데이터 생성기(ECS 서비스, 기본 0대)와 DB 마이그레이션 태스크
+#   생성기는 소스 시스템 흉내이므로 이 스택에 둔다. MSK·랜딩 버킷은 이후 스택에 생기므로
+#   권한은 이름 규칙(ARN 패턴)으로 미리 주고, 주소는 실행 시점에 SSM 에서 찾는다.
+# ---------------------------------------------------------------------------
+variable "generator_image_tag" {
+  description = "ECR 태그(불변). git short SHA 를 쓴다"
+  type        = string
+  default     = "0.1.0"
+}
+
+variable "generator_desired_count" {
+  description = "0 이면 꺼 둔다. make gen-start 로 1 로 올린다"
+  type        = number
+  default     = 0
+}
+
+variable "generator_args" {
+  type    = list(string)
+  default = ["p1.generator.cli", "run", "--orders-per-minute", "30", "--clicks-per-second", "20"]
+}
+
+data "aws_ssm_parameter" "platform" {
+  for_each = toset(["ecs_cluster_arn", "ecs_execution_role_arn", "ecs_log_group", "ecr_registry", "ecr_prefix"])
+  name     = "${local.ssm_prefix}/platform/${each.key}"
+}
+
+data "aws_ssm_parameter" "app_subnet_ids" {
+  name = "${local.ssm_prefix}/network/app_subnet_ids"
+}
+
+data "aws_ssm_parameter" "kms_lake_arn" {
+  name = "${local.ssm_prefix}/security/kms_lake_arn"
+}
+
+locals {
+  platform        = { for k, p in data.aws_ssm_parameter.platform : k => p.value }
+  generator_image = "${local.platform.ecr_registry}/${local.platform.ecr_prefix}/generator:${var.generator_image_tag}"
+  msk_cluster_arn = "arn:aws:kafka:${var.region}:${local.account_id}:cluster/${local.name}-msk/*"
+  landing_bucket  = "${local.name}-landing-${local.account_id}"
+}
+
+data "aws_iam_policy_document" "generator" {
+  statement {
+    sid       = "DbSecrets"
+    actions   = ["secretsmanager:GetSecretValue"]
+    resources = [aws_secretsmanager_secret.db_user["mysql/generator"].arn, aws_secretsmanager_secret.db_user["postgres/generator"].arn]
+  }
+  statement {
+    sid       = "MskConnect"
+    actions   = ["kafka-cluster:Connect", "kafka-cluster:DescribeCluster", "kafka-cluster:WriteDataIdempotently"]
+    resources = [local.msk_cluster_arn]
+  }
+  statement {
+    sid       = "MskWriteClicks"
+    actions   = ["kafka-cluster:DescribeTopic", "kafka-cluster:WriteData"]
+    resources = ["arn:aws:kafka:${var.region}:${local.account_id}:topic/${local.name}-msk/*/clicks.raw"]
+  }
+  statement {
+    sid       = "MskBootstrapParam"
+    actions   = ["ssm:GetParameter"]
+    resources = ["arn:aws:ssm:${var.region}:${local.account_id}:parameter${local.ssm_prefix}/p1/streaming/*"]
+  }
+  statement {
+    sid       = "SettlementDrop"
+    actions   = ["s3:PutObject"]
+    resources = ["arn:aws:s3:::${local.landing_bucket}/pg_settlement/*"]
+  }
+  statement {
+    sid       = "LakeKey"
+    actions   = ["kms:GenerateDataKey", "kms:Decrypt"]
+    resources = [data.aws_ssm_parameter.kms_lake_arn.value]
+  }
+}
+
+module "generator" {
+  source             = "../../modules/ecs_service"
+  name               = "${local.name}-generator"
+  cluster_arn        = local.platform.ecs_cluster_arn
+  image              = local.generator_image
+  cpu                = 512
+  memory             = 1024
+  command            = var.generator_args
+  execution_role_arn = local.platform.ecs_execution_role_arn
+  log_group_name     = local.platform.ecs_log_group
+  task_policy_json   = data.aws_iam_policy_document.generator.json
+  environment = {
+    GEN_MYSQL_SECRET    = aws_secretsmanager_secret.db_user["mysql/generator"].name
+    GEN_PG_SECRET       = aws_secretsmanager_secret.db_user["postgres/generator"].name
+    MSK_BOOTSTRAP_PARAM = "${local.ssm_prefix}/p1/streaming/bootstrap_brokers_iam"
+    SCHEMA_REGISTRY_URL = "http://schema-registry.${var.project}.internal:8081"
+    LANDING_BUCKET      = local.landing_bucket
+  }
+  create_service     = true
+  desired_count      = var.generator_desired_count
+  capacity_provider  = "FARGATE_SPOT" # 끊겨도 되는 부하 발생기
+  subnet_ids         = split(",", data.aws_ssm_parameter.app_subnet_ids.value)
+  security_group_ids = [aws_security_group.db_clients.id, aws_security_group.msk_clients.id]
+}
+
+data "aws_iam_policy_document" "migrate" {
+  statement {
+    sid     = "MasterSecrets"
+    actions = ["secretsmanager:GetSecretValue"]
+    resources = [
+      aws_db_instance.this["mysql"].master_user_secret[0].secret_arn,
+      aws_db_instance.this["postgres"].master_user_secret[0].secret_arn,
+    ]
+  }
+  statement {
+    sid       = "WriteAppSecrets"
+    actions   = ["secretsmanager:PutSecretValue"]
+    resources = [for s in aws_secretsmanager_secret.db_user : s.arn]
+  }
+  statement {
+    sid       = "ReadSourceParams"
+    actions   = ["ssm:GetParameter"]
+    resources = ["arn:aws:ssm:${var.region}:${local.account_id}:parameter${local.ssm_prefix}/p1/sources/*"]
+  }
+}
+
+# RunTask 전용(서비스 없음): aws ecs run-task 로 한 번 돌리고 끝난다. 마스터 암호를 읽는 유일한 주체
+module "db_migrate" {
+  source             = "../../modules/ecs_service"
+  name               = "${local.name}-db-migrate"
+  cluster_arn        = local.platform.ecs_cluster_arn
+  image              = local.generator_image
+  cpu                = 256
+  memory             = 512
+  command            = ["p1.sources.migrate", "--engine", "mysql", "--bootstrap-users"]
+  execution_role_arn = local.platform.ecs_execution_role_arn
+  log_group_name     = local.platform.ecs_log_group
+  task_policy_json   = data.aws_iam_policy_document.migrate.json
+  create_service     = false
+}
+
+module "generator_outputs" {
+  source = "../../modules/ssm_outputs"
+  prefix = "${local.ssm_prefix}/p1/generator"
+  values = {
+    service_name          = module.generator.service_name
+    task_definition       = module.generator.task_definition_family
+    task_role_name        = module.generator.task_role_name
+    migrate_task_family   = module.db_migrate.task_definition_family
+    migrate_task_role_arn = module.db_migrate.task_role_arn
+  }
+}
