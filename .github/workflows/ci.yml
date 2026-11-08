@@ -50,6 +50,20 @@ jobs:
       - run: pip install 'dbt-core==1.12.*' 'dbt-athena-community==1.11.*'
       - run: dbt parse --no-partial-parse --warn-error-options '{"error": ["NoNodesForSelectionCriteria"]}'
 
+  airflow:
+    # 실제 Airflow 로 DAG 를 읽어 import 오류·순환·잘못된 연산자 사용을 잡는다(MWAA 와 같은 3.x 라인)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: |
+          pip install "apache-airflow==3.0.6" apache-airflow-providers-amazon apache-airflow-providers-openlineage \
+            apache-airflow-providers-common-messaging pytest \
+            --constraint "https://raw.githubusercontent.com/apache/airflow/constraints-3.0.6/constraints-3.12.txt"
+      - run: pytest -q p1/orchestration/tests
+
   terraform:
     runs-on: ubuntu-latest
     steps:

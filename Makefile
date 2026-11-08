@@ -12,7 +12,7 @@ define var_files
 -var-file=$(ROOT)/infra/envs/$(ENV)/common.tfvars $(if $(wildcard infra/envs/$(ENV)/$(1).tfvars),-var-file=$(ROOT)/infra/envs/$(ENV)/$(1).tfvars,)
 endef
 
-.PHONY: help init plan apply destroy output pause resume lint test tf-fmt tf-validate validate-all gen-start gen-stop db-migrate topics schemas spark-job recon
+.PHONY: help init plan apply destroy output pause resume lint test tf-fmt tf-validate validate-all gen-start gen-stop db-migrate topics schemas spark-job recon dags
 
 help:
 	@echo "make init|plan|apply|destroy STACK=<name> [ENV=dev] [TF=terraform|tofu]"
@@ -127,3 +127,6 @@ recon:
 	  --task-definition $(call ssm,p1/lakehouse/recon_task_family) --launch-type FARGATE \
 	  --network-configuration "awsvpcConfiguration={subnets=[$(call ssm,network/app_subnet_ids)],securityGroups=[$(call ssm,p1/sources/db_clients_sg_id)]}" \
 	  --overrides '{"containerOverrides":[{"name":"app","command":$(CMD)}]}' --query 'tasks[0].taskArn' --output text
+
+dags:
+	./p1/orchestration/deploy.sh

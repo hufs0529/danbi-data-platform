@@ -127,6 +127,13 @@ locals {
   spark_defaults = jsondecode(file("${path.module}/../../../p1/batch/spark-defaults.json"))
   spark_conf = merge(local.spark_defaults, {
     "spark.sql.catalog.glue.warehouse" = "s3://${local.in["p1/lakehouse/silver_bucket"]}/"
+    # OpenLineage Spark 리스너: MERGE·INSERT OVERWRITE 의 입력·출력 테이블(컬럼 계보 포함)을 Marquez 로 보낸다.
+    # 리스너 실패는 잡을 실패시키지 않는다. jar 는 build_spark_jobs.sh 가 artifacts/spark/lib 에 올린다
+    "spark.jars"                       = "${local.spark_defaults["spark.jars"]},s3://${local.artifacts}/spark/lib/openlineage-spark.jar"
+    "spark.extraListeners"             = "io.openlineage.spark.agent.OpenLineageSparkListener"
+    "spark.openlineage.transport.type" = "http"
+    "spark.openlineage.transport.url"  = "http://marquez.${var.project}.internal:5000"
+    "spark.openlineage.namespace"      = "${var.project}-${var.env}"
   })
   spark_prefix        = "s3://${local.artifacts}/spark/${var.spark_jobs_version}"
   spark_submit_params = join(" ", concat([for k, v in local.spark_conf : "--conf ${k}=${v}"], ["--py-files ${local.spark_prefix}/p1-jobs.zip"]))

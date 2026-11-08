@@ -51,6 +51,7 @@ locals {
     "postgres/debezium"  = "CDC 커넥터(rds_replication)"
     "postgres/generator" = "데이터 생성기(DML)"
     "postgres/recon"     = "대사 잡(읽기 전용)"
+    "postgres/marquez"   = "OpenLineage 수신 서버(Marquez) 메타데이터 DB 소유자(P1-10)"
   }
 }
 
