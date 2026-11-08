@@ -1,0 +1,40 @@
+name: access-expiry
+# 기간제 접근 요청(governance/access)의 만료를 매일 반영한다: p1-60-governance 를 plan→apply.
+# 만료된 요청은 Terraform 의 for_each 에서 빠지므로 LF 권한이 회수된다(S-G2, "지체 없이" = 24시간 이내).
+on:
+  schedule:
+    - cron: "10 15 * * *"   # 00:10 KST
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  apply:
+    if: vars.AWS_APPLY_ROLE_ARN != ''
+    runs-on: ubuntu-latest
+    environment: dev
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.13.4"
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_APPLY_ROLE_ARN }}
+          aws-region: ap-northeast-2
+      - name: backend.hcl
+        run: |
+          cat > infra/backend.hcl <<EOF
+          bucket       = "${{ vars.TF_STATE_BUCKET }}"
+          region       = "ap-northeast-2"
+          encrypt      = true
+          kms_key_id   = "${{ vars.TF_STATE_KMS_KEY_ARN }}"
+          use_lockfile = true
+          EOF
+      - run: make init STACK=p1-60-governance
+      - run: make plan STACK=p1-60-governance
+      - run: make apply STACK=p1-60-governance
+      - name: 현재 유효한 요청
+        run: cd infra/stacks/p1-60-governance && terraform output -json active_access_requests >> "$GITHUB_STEP_SUMMARY"

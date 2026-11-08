@@ -32,6 +32,17 @@ jobs:
       - run: ruff check .
       - run: ruff format --check .
       - run: pytest -q
+      - name: 데이터 계약 거버넌스(분류·보존 근거·소스 컬럼 전수 매핑)
+        run: python -m contracts.governance
+      - name: 접근 요청 검사(승인자 2명, 30일, 허용 범위)
+        run: python -m p1.governance.access
+      - name: 스키마·계약 호환성(기준 브랜치 대비, S-C1)
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch --no-tags --depth=50 origin ${{ github.base_ref }}
+          python -m contracts.compat --base origin/${{ github.base_ref }}
+      - name: 커넥터 설정·토픽 교차 검사
+        run: python -m p1.cdc.lint && python -m p1.streaming.topics lint
 
   dbt:
     # 연결 없이 구문·참조·테스트 정의·시맨틱 레이어를 검사한다(parse). 실제 build 는 MWAA 가 VPC 안에서
