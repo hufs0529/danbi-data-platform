@@ -76,10 +76,11 @@ def _bootstrap() -> str | None:
     from danbi_common.aws import get_parameter
 
     try:
-        return get_parameter(param)
+        value = get_parameter(param)
     except Exception as e:  # ParameterNotFound: 아직 MSK 가 없다
         log.info(f"MSK 부트스트랩 파라미터 없음({type(e).__name__})")
         return None
+    return None if value == "disabled" else value  # make pause 로 MSK 를 지운 상태
 
 
 def _click_sink() -> KafkaClickSink | None:
