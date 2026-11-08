@@ -93,6 +93,8 @@ jobs:
         with:
           directory: infra
           config_file: .checkov.yaml
+          # 기존 지적은 기준선에 기록, 새 지적만 실패시킨다(재생성: checkov -d infra --config-file .checkov.yaml --create-baseline)
+          baseline: infra/.checkov.baseline
 
   plan:
     # PR 에서 바뀐 스택만 plan 한다. 결과는 잡 요약(Step Summary)에 남긴다.

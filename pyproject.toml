@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "danbi-data-platform"
 version = "0.1.0"
@@ -54,3 +58,8 @@ addopts = "-ra"
 markers = [
   "spark: 로컬 Spark(JVM)가 필요한 테스트",
 ]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["p1*", "p2*", "p3*", "contracts*", "scripts*"]
+exclude = ["*.tests", "*.tests.*"]
