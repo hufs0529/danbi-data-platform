@@ -17,6 +17,8 @@ columns:
   - {name: from_status, type: string, source: from_status, classification: internal}
   - {name: to_status, type: string, source: to_status, classification: internal}
   - {name: amount, type: "decimal(12,0)", source: amount, classification: internal}
+  - {name: card_token, type: string, source: card_token, transform: "token:card", classification: personal_token, description: PG 카드 토큰의 토큰(이상결제 탐지 키)}
+  - {name: address_id, type: bigint, source: address_id, classification: internal}
   - {name: version, type: int, source: version, classification: internal}
   - {name: late_arrival, type: boolean, source: late_arrival, classification: internal}
   - {name: occurred_at, type: timestamp, source: occurred_at, transform: ts_iso, classification: internal}

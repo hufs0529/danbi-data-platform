@@ -40,3 +40,4 @@ out/
 p1/dbt/.user.yml
 p1/dbt/logs/
 p1/streaming/java/target/
+infra/**/.build/

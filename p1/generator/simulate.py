@@ -58,6 +58,8 @@ class PaymentState:
     version: int = 0
     capture_due: dt.datetime | None = None
     late_approval_due: dt.datetime | None = None
+    card_token: str | None = None
+    address_id: int | None = None
 
 
 @dataclass
@@ -87,6 +89,7 @@ class Simulator:
         self.world = World()
         self.ticks = 0
         self._uuid_rng = random.Random(seed + 1)
+        self.fraud_cards: list[str] = []  # 주입한 이상결제 카드(탐지율 100% 검증용)
 
     # ------------------------------------------------------------------ 공통
     def _uuid(self) -> str:
@@ -172,10 +175,12 @@ class Simulator:
         active = [m for m in self.world.members.values() if not m.withdrawn and m.address_ids]
         return self.rng.choice(active) if active else None
 
-    def _place_order(self) -> list[Action]:
-        member = self._active_member()
+    def _place_order(self, member: MemberState | None = None, card_token: str | None = None,
+                     address_id: int | None = None) -> list[Action]:  # fmt: skip
+        member = member or self._active_member()
         if member is None or not self.world.products:
             return []
+        address_id = address_id or member.address_ids[0]
         order_id = self._id()
         order_no = f"O{self.now.astimezone(KST):%Y%m%d}{order_id % 10_000_000:07d}"
         items, ops = [], []
@@ -199,22 +204,26 @@ class Simulator:
             ops.append(Op("insert", "coupon_usages", {"usage_id": self._id(), "coupon_id": coupon_id,
                           "member_id": member.member_id, "order_id": order_id, "used_at": self.now}))  # fmt: skip
         ops.insert(0, Op("insert", "orders", {"order_id": order_id, "order_no": order_no,
-                         "member_id": member.member_id, "address_id": member.address_ids[0], "status": "CREATED",
+                         "member_id": member.member_id, "address_id": address_id, "status": "CREATED",
                          "total_amount": total, "discount_amount": discount, "coupon_id": coupon_id,
                          "currency": "KRW", "ordered_at": self.now}))  # fmt: skip
         actions: list[Action] = [Write("commerce", tuple(ops), self.now)]
 
         # 결제: 대부분 승인, 일부 실패
         pay_amount = total - discount
-        method = self.rng.choices(["CARD", "EASY_PAY", "TRANSFER"], [0.7, 0.2, 0.1])[0]
+        method = (
+            "CARD" if card_token else self.rng.choices(["CARD", "EASY_PAY", "TRANSFER"], [0.7, 0.2, 0.1])[0]
+        )
         pid = self._id()
         pkey = f"pg_{self._uuid().replace('-', '')[:24]}"
-        failed = self._chance(0.03)
+        failed = (
+            self._chance(0.03) and card_token is None
+        )  # 도용 카드 결제는 PG 승인을 통과한다(그래서 탐지가 필요하다)
         ps = PaymentState(pid, pkey, order_id, order_no, member.member_id, pay_amount, method,
                           "FAILED" if failed else "APPROVED", list(items))  # fmt: skip
-        card_token = (
-            f"ctk_{member.member_id % 7919:04d}{self.rng.randint(0, 2)}" if method == "CARD" else None
-        )
+        if card_token is None and method == "CARD":
+            card_token = f"ctk_{member.member_id % 7919:04d}{self.rng.randint(0, 2)}"
+        ps.card_token, ps.address_id = card_token, address_id
         pay_ops = [Op("insert", "payments", {"payment_id": pid, "payment_key": pkey, "order_no": order_no,
                       "member_id": member.member_id, "method": method, "card_token": card_token,
                       "card_issuer": self.rng.choice(ISSUERS) if method == "CARD" else None,
@@ -257,6 +266,7 @@ class Simulator:
         payload = {"payment_key": ps.payment_key, "order_no": ps.order_no, "member_id": ps.member_id,
                    "method": ps.method, "from_status": frm, "to_status": to, "amount": payload_amount,
                    "total_amount": str(ps.amount), "canceled_amount": str(ps.canceled), "version": ps.version,
+                   "card_token": ps.card_token, "address_id": ps.address_id,
                    "occurred_at": self.now.isoformat(), **extra}  # fmt: skip
         ops = [
             Op("insert", "payment_status_history", {"payment_id": ps.payment_id, "from_status": frm,
@@ -376,6 +386,18 @@ class Simulator:
         return [Write("commerce", (Op("update", "product_prices", {"sale_price": new}, {"product_id": pid}),),
                       self.now)]  # fmt: skip
 
+    def _fraud_burst(self) -> list[Action]:
+        """S-B3 테스트 패턴: 도용된 카드 하나로 짧은 시간에 서로 다른 배송지 3~4곳 결제."""
+        members = [m for m in self.world.members.values() if not m.withdrawn and m.address_ids]
+        if len(members) < 4:
+            return []
+        stolen = f"ctk_stolen_{self.rng.randint(0, 10**6):06d}"
+        out: list[Action] = []
+        for m in self.rng.sample(members, k=self.rng.randint(3, 4)):
+            out += self._place_order(member=m, card_token=stolen, address_id=m.address_ids[0])
+        self.fraud_cards.append(stolen)
+        return out
+
     # ------------------------------------------------------------------ 클릭
     def _click(self, event_type: str, session: str, member_id: int | None, **kw: Any) -> Click:
         bot = kw.pop("bot", False)
@@ -441,6 +463,8 @@ class Simulator:
             actions.extend(self._member_changes())
         if self.world.products and self._chance(0.01):
             actions.extend(self._price_change())
+        if self._chance(self.faults.fraud_burst_ratio):
+            actions.extend(self._fraud_burst())
         actions.extend(self._progress_payments())
         self.now += dt.timedelta(seconds=1)
         return actions

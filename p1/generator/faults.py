@@ -17,6 +17,7 @@ class Faults:
     schema_change_at: int | None = None  # N번째 tick 에 orders 컬럼 추가(S-C1 호환 변경)
     breaking_change_at: int | None = None  # N번째 tick 에 타입 변경(S-C1 비호환 → CI·계약이 막아야 함)
     null_amount_ratio: float = 0.0  # 결제 금액 null 급증(F-08). 소스 제약이 없는 outbox payload 에만
+    fraud_burst_ratio: float = 0.0  # 초당 확률: 한 카드로 5분 안에 서로 다른 배송지 3곳 이상(S-B3)
 
     @classmethod
     def parse(cls, spec: str | None) -> Faults:
@@ -25,7 +26,7 @@ class Faults:
         if not spec:
             return f
         alias = {"late": "late_ratio", "dup": "dup_ratio", "ooo": "out_of_order_ratio",
-                 "hard_delete": "hard_delete_ratio", "bot": "bot_ratio", "null_amount": "null_amount_ratio"}  # fmt: skip
+                 "hard_delete": "hard_delete_ratio", "bot": "bot_ratio", "null_amount": "null_amount_ratio", "fraud": "fraud_burst_ratio"}  # fmt: skip
         types = {fl.name: fl.type for fl in fields(cls)}
         for part in spec.split(","):
             k, _, v = part.partition("=")
