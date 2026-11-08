@@ -12,7 +12,7 @@ define var_files
 -var-file=$(ROOT)/infra/envs/$(ENV)/common.tfvars $(if $(wildcard infra/envs/$(ENV)/$(1).tfvars),-var-file=$(ROOT)/infra/envs/$(ENV)/$(1).tfvars,)
 endef
 
-.PHONY: help init plan apply destroy output pause resume lint test tf-fmt tf-validate validate-all gen-start gen-stop db-migrate topics schemas
+.PHONY: help init plan apply destroy output pause resume lint test tf-fmt tf-validate validate-all gen-start gen-stop db-migrate topics schemas spark-job
 
 help:
 	@echo "make init|plan|apply|destroy STACK=<name> [ENV=dev] [TF=terraform|tofu]"
@@ -109,3 +109,13 @@ topics:
 
 schemas:
 	$(call run_admin,["p1.streaming.schema_registry.admin","$(SR)"])
+
+# EMR Serverless 잡 실행: make spark-job JOB=silver_merge ARGS="--tables silver.orders"
+JOB ?= silver_merge
+ARGS ?=
+spark-job:
+	aws emr-serverless start-job-run --application-id $(call ssm,p1/processing/emr_app_id) \
+	  --execution-role-arn $(call ssm,p1/processing/emr_job_role_arn) --name $(JOB)-manual \
+	  --job-driver '{"sparkSubmit":{"entryPoint":"$(call ssm,p1/processing/spark_entry_prefix)/$(JOB).py","entryPointArguments":[$(if $(ARGS),$(shell python3 -c 'import json,sys;print(",".join(json.dumps(a) for a in sys.argv[1:]))' $(ARGS)),)],"sparkSubmitParameters":"$(call ssm,p1/processing/spark_submit_params)"}}' \
+	  --configuration-overrides '{"monitoringConfiguration":{"s3MonitoringConfiguration":{"logUri":"$(call ssm,p1/processing/emr_log_uri)"}}}' \
+	  --query jobRunId --output text
