@@ -43,6 +43,8 @@ locals {
     dbt   = local.in["p1/processing/dbt_task_role_arn"]
     recon = local.in["p1/lakehouse/recon_task_role_arn"]
     mwaa  = local.in["p1/orchestration/mwaa_role_arn"]
+    # P1-13 파기 단계 Lambda: Athena DELETE/UPDATE 로 silver·gold 를 쓴다
+    erasure = aws_iam_role.erasure.arn
   }
   governed_dbs = ["silver", "gold", "ops", "gold_audit"]
 }
