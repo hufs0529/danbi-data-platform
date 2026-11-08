@@ -1,0 +1,24 @@
+dataset: silver.payment_events
+owner: team-payment-data
+description: 결제 도메인 이벤트(Outbox). (payment_key, version) 로 중복 제거. 도착 순서가 아니라 version·발생 시각으로 정렬한다
+grain: [payment_key, version]
+source: {topic: events.payment}
+update: append
+partition: ["day(occurred_at)"]
+retention: {class: ecommerce_transaction_5y}
+sla: {freshness_minutes: 15}
+columns:
+  - {name: event_id, type: string, source: event_id, classification: internal}
+  - {name: event_type, type: string, source: event_type, classification: internal}
+  - {name: payment_key, type: string, source: payment_key, classification: internal}
+  - {name: order_no, type: string, source: order_no, classification: internal}
+  - {name: member_token, type: string, source: member_id, transform: "token:member", classification: personal_token}
+  - {name: method, type: string, source: method, classification: internal}
+  - {name: from_status, type: string, source: from_status, classification: internal}
+  - {name: to_status, type: string, source: to_status, classification: internal}
+  - {name: amount, type: "decimal(12,0)", source: amount, classification: internal}
+  - {name: version, type: int, source: version, classification: internal}
+  - {name: late_arrival, type: boolean, source: late_arrival, classification: internal}
+  - {name: occurred_at, type: timestamp, source: occurred_at, transform: ts_iso, classification: internal}
+quality:
+  - {not_null: [payment_key, version, occurred_at]}

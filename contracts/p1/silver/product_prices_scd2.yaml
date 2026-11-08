@@ -1,0 +1,15 @@
+dataset: silver.product_prices_scd2
+owner: team-commerce-data
+description: 상품 가격 이력(SCD2). 운영 DB 는 현재가만 덮어쓰므로 이력은 CDC 로만 복원된다
+grain: [product_id, valid_from]
+source: {db: commerce, table: product_prices}
+update: scd2
+scd2_tracked: [list_price, sale_price]
+partition: []
+retention: {class: ecommerce_ad_6m_min}
+sla: {freshness_minutes: 15}
+columns:
+  - {name: product_id, type: bigint, source: product_id, classification: public}
+  - {name: list_price, type: "decimal(12,0)", source: list_price, classification: public}
+  - {name: sale_price, type: "decimal(12,0)", source: sale_price, classification: public}
+  - {name: currency, type: string, source: currency, classification: public}

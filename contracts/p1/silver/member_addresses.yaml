@@ -1,0 +1,23 @@
+dataset: silver.member_addresses
+owner: team-commerce-data
+description: 회원 배송지 최신 상태. 하드 삭제는 is_deleted 로 남는다. 분석용으로는 시도·시군구·우편번호 앞 3자리만 평문
+grain: [address_id]
+source: {db: commerce, table: member_addresses}
+update: merge
+partition: []
+retention: {class: member_until_withdrawal}
+sla: {freshness_minutes: 15}
+columns:
+  - {name: address_id, type: bigint, source: address_id, classification: internal}
+  - {name: member_token, type: string, source: member_id, transform: "token:member", classification: personal_token}
+  - {name: label, type: string, source: label, classification: internal}
+  - {name: recipient_name_enc, type: string, source: recipient_name, transform: "encrypt:member", classification: personal_encrypted}
+  - {name: recipient_phone_token, type: string, source: recipient_phone, transform: "token:phone", classification: personal_token}
+  - {name: zip3, type: string, source: zipcode, transform: "generalize:zip3", classification: personal_generalized}
+  - {name: region_sido, type: string, source: address1, transform: "generalize:sido", classification: personal_generalized}
+  - {name: region_sigungu, type: string, source: address1, transform: "generalize:sigungu", classification: personal_generalized}
+  - {name: address1_enc, type: string, source: address1, transform: "encrypt:member", classification: personal_encrypted}
+  - {name: address2_enc, type: string, source: address2, transform: "encrypt:member", classification: personal_encrypted}
+  - {name: zipcode_enc, type: string, source: zipcode, transform: "encrypt:member", classification: personal_encrypted}
+  - {name: is_default, type: boolean, source: is_default, classification: internal}
+  - {name: updated_at, type: timestamp, source: updated_at, transform: ts_iso, classification: internal}

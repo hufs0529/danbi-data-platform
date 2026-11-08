@@ -1,0 +1,23 @@
+dataset: silver.pg_settlement
+owner: team-finance-data
+description: PG 정산 명세의 유효본(같은 정산일의 최신 정정본만). 금액은 v1·v2 헤더 차이를 정규화(수수료와 부가세 분리)
+grain: [settle_date, payment_key, kind, txn_at]
+source: {table: bronze.pg_settlement_lines}
+update: derived
+partition: ["month(settle_date)"]
+retention: {class: ecommerce_transaction_5y}
+sla: {deadline_kst: "08:30"}
+columns:
+  - {name: settle_date, type: date, classification: internal}
+  - {name: txn_at, type: timestamp, classification: internal}
+  - {name: payment_key, type: string, classification: internal}
+  - {name: order_no, type: string, classification: internal}
+  - {name: kind, type: string, classification: internal, accepted_values: [CAPTURE, CANCEL]}
+  - {name: method, type: string, classification: internal}
+  - {name: issuer, type: string, classification: internal}
+  - {name: amount, type: "decimal(18,0)", classification: internal}
+  - {name: fee, type: "decimal(18,0)", classification: internal}
+  - {name: vat, type: "decimal(18,0)", classification: internal}
+  - {name: net, type: "decimal(18,0)", classification: internal}
+  - {name: file_seq, type: int, classification: internal}
+  - {name: file_sha256, type: string, classification: internal}

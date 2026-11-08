@@ -1,0 +1,18 @@
+dataset: silver.dim_member_scd2
+owner: team-commerce-data
+description: 회원 등급·상태·마케팅 동의 이력 (SCD Type 2). "그 시점의 등급" 질문(S-B4)에 답한다
+grain: [member_token, valid_from]
+source: {db: commerce, table: members}
+update: scd2
+scd2_tracked: [grade, status, marketing_agreed]
+partition: []
+retention: {class: member_until_withdrawal}
+sla: {freshness_minutes: 15}
+columns:
+  - {name: member_token, type: string, source: member_id, transform: "token:member", classification: personal_token}
+  - {name: grade, type: string, source: grade, classification: internal}
+  - {name: status, type: string, source: status, classification: internal}
+  - {name: marketing_agreed, type: boolean, source: marketing_agreed, classification: internal}
+quality:
+  - {not_null: [member_token, valid_from]}
+  - {unique_current: member_token}

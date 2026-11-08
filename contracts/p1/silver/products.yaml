@@ -1,0 +1,16 @@
+dataset: silver.products
+owner: team-commerce-data
+description: 상품 마스터 최신 상태
+grain: [product_id]
+source: {db: commerce, table: products}
+update: merge
+partition: []
+retention: {class: business_record}
+sla: {freshness_minutes: 15}
+columns:
+  - {name: product_id, type: bigint, source: product_id, classification: public}
+  - {name: name, type: string, source: name, classification: public}
+  - {name: category, type: string, source: category, classification: public}
+  - {name: brand, type: string, source: brand, classification: public}
+  - {name: status, type: string, source: status, classification: public}
+  - {name: updated_at, type: timestamp, source: updated_at, transform: ts_iso, classification: internal}

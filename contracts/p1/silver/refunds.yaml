@@ -1,0 +1,17 @@
+dataset: silver.refunds
+owner: team-payment-data
+description: 환불 최신 상태
+grain: [refund_id]
+source: {db: payment, table: refunds}
+update: merge
+partition: []
+retention: {class: ecommerce_transaction_5y}
+sla: {freshness_minutes: 15}
+columns:
+  - {name: refund_id, type: bigint, source: refund_id, classification: internal}
+  - {name: payment_id, type: bigint, source: payment_id, classification: internal}
+  - {name: amount, type: "decimal(12,0)", source: amount, classification: internal}
+  - {name: reason, type: string, source: reason, classification: internal}
+  - {name: status, type: string, source: status, classification: internal}
+  - {name: requested_at, type: timestamp, source: requested_at, transform: ts_iso, classification: internal}
+  - {name: completed_at, type: timestamp, source: completed_at, transform: ts_iso, classification: internal}

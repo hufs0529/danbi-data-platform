@@ -1,0 +1,25 @@
+dataset: silver.events_clean
+owner: team-marketing-data
+description: 정제된 클릭스트림. event_id 중복 제거, 봇 판정(규칙 버전 기록), 지연 전송 표시
+grain: [event_id]
+source: {topic: clicks.raw}
+update: append
+partition: ["day(event_time)"]
+retention: {class: behavior_1y}
+sla: {freshness_minutes: 60}
+columns:
+  - {name: event_id, type: string, source: event_id, classification: internal}
+  - {name: event_type, type: string, source: event_type, classification: internal, accepted_values: [page_view, search, add_to_cart, checkout_start, purchase]}
+  - {name: session_id, type: string, source: session_id, classification: internal}
+  - {name: member_token, type: string, source: member_id, transform: "token:member", classification: personal_token}
+  - {name: device_token, type: string, source: device_id, transform: "token:device", classification: personal_token}
+  - {name: platform, type: string, source: platform, classification: internal}
+  - {name: page, type: string, source: page, classification: internal}
+  - {name: product_id, type: bigint, source: product_id, classification: internal}
+  - {name: search_query_masked, type: string, source: search_query, transform: "mask:text", classification: personal_generalized}
+  - {name: order_no, type: string, source: order_no, classification: internal}
+  - {name: is_bot, type: boolean, derive: "is_bot(user_agent)", classification: internal}
+  - {name: bot_rule_version, type: string, derive: "bot_rule_version()", classification: internal}
+  - {name: event_time, type: timestamp, source: event_time, classification: internal}
+  - {name: sent_time, type: timestamp, source: sent_time, classification: internal}
+  - {name: delay_seconds, type: bigint, derive: "seconds_between(event_time, sent_time)", classification: internal}

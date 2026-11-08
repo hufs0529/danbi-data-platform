@@ -1,0 +1,15 @@
+dataset: silver.coupon_usages
+owner: team-marketing-data
+description: 쿠폰 사용 기록. 주문 취소 시 운영에서 하드 삭제될 수 있다
+grain: [usage_id]
+source: {db: commerce, table: coupon_usages}
+update: merge
+partition: []
+retention: {class: ecommerce_transaction_5y}
+sla: {freshness_minutes: 15}
+columns:
+  - {name: usage_id, type: bigint, source: usage_id, classification: internal}
+  - {name: coupon_id, type: bigint, source: coupon_id, classification: internal}
+  - {name: member_token, type: string, source: member_id, transform: "token:member", classification: personal_token}
+  - {name: order_id, type: bigint, source: order_id, classification: internal}
+  - {name: used_at, type: timestamp, source: used_at, transform: ts_iso, classification: internal}

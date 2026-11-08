@@ -1,0 +1,28 @@
+dataset: silver.orders
+owner: team-commerce-data
+description: 주문 헤더의 최신 상태 (1행 = 1주문)
+grain: [order_id]
+source: {db: commerce, table: orders}
+update: merge
+partition: ["month(ordered_at)"]
+retention: {class: ecommerce_transaction_5y}
+sla: {freshness_minutes: 15}
+schema_compatibility: BACKWARD
+change_policy: 비호환 변경은 v2 데이터셋을 30일 병행한 뒤 전환
+consumers: [gold.fct_order_items, gold.mart_daily_sales]
+columns:
+  - {name: order_id, type: bigint, source: order_id, classification: internal}
+  - {name: order_no, type: string, source: order_no, classification: internal}
+  - {name: member_token, type: string, source: member_id, transform: "token:member", classification: personal_token}
+  - {name: address_id, type: bigint, source: address_id, classification: internal}
+  - {name: status, type: string, source: status, classification: internal, accepted_values: [CREATED, PAID, SHIPPED, DELIVERED, CANCELED, PARTIAL_CANCELED]}
+  - {name: total_amount, type: "decimal(12,0)", source: total_amount, classification: internal}
+  - {name: discount_amount, type: "decimal(12,0)", source: discount_amount, classification: internal}
+  - {name: coupon_id, type: bigint, source: coupon_id, classification: internal}
+  - {name: currency, type: string, source: currency, classification: internal}
+  - {name: ordered_at, type: timestamp, source: ordered_at, transform: ts_iso, classification: internal}
+  - {name: ordered_date_kst, type: date, derive: "kst_date(ordered_at)", classification: internal}
+  - {name: updated_at, type: timestamp, source: updated_at, transform: ts_iso, classification: internal}
+quality:
+  - {not_null: [order_id, ordered_at, total_amount]}
+  - {freshness: {column: _ingested_at, max_delay_minutes: 15}}

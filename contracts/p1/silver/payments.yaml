@@ -1,0 +1,27 @@
+dataset: silver.payments
+owner: team-payment-data
+description: 결제 최신 상태 (1행 = 1결제). card_token 은 PG 토큰을 한 번 더 토큰화한 값(이상결제 탐지 키)
+grain: [payment_id]
+source: {db: payment, table: payments}
+update: merge
+partition: ["month(updated_at)"]
+retention: {class: ecommerce_transaction_5y}
+sla: {freshness_minutes: 15}
+columns:
+  - {name: payment_id, type: bigint, source: payment_id, classification: internal}
+  - {name: payment_key, type: string, source: payment_key, classification: internal}
+  - {name: order_no, type: string, source: order_no, classification: internal}
+  - {name: member_token, type: string, source: member_id, transform: "token:member", classification: personal_token}
+  - {name: method, type: string, source: method, classification: internal, accepted_values: [CARD, TRANSFER, EASY_PAY]}
+  - {name: card_token, type: string, source: card_token, transform: "token:card", classification: personal_token}
+  - {name: card_issuer, type: string, source: card_issuer, classification: internal}
+  - {name: status, type: string, source: status, classification: internal, accepted_values: [READY, APPROVED, CAPTURED, PARTIAL_CANCELED, CANCELED, FAILED]}
+  - {name: amount, type: "decimal(12,0)", source: amount, classification: internal}
+  - {name: canceled_amount, type: "decimal(12,0)", source: canceled_amount, classification: internal}
+  - {name: currency, type: string, source: currency, classification: internal}
+  - {name: approved_at, type: timestamp, source: approved_at, transform: ts_iso, classification: internal}
+  - {name: captured_at, type: timestamp, source: captured_at, transform: ts_iso, classification: internal}
+  - {name: updated_at, type: timestamp, source: updated_at, transform: ts_iso, classification: internal}
+  - {name: version, type: int, source: version, classification: internal}
+quality:
+  - {not_null: [payment_id, payment_key, amount, status]}

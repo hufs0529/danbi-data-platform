@@ -1,0 +1,23 @@
+dataset: silver.members
+owner: team-commerce-data
+description: 회원의 최신 상태 (1행 = 1회원). 원문 개인정보는 없고 토큰·암호문·일반화 값만 있다
+grain: [member_token]
+source: {db: commerce, table: members}
+update: merge
+partition: []
+retention: {class: member_until_withdrawal}
+sla: {freshness_minutes: 15}
+columns:
+  - {name: member_token, type: string, source: member_id, transform: "token:member", classification: personal_token, description: 회원 식별 토큰(조인 키)}
+  - {name: email_token, type: string, source: email, transform: "token:email", classification: personal_token}
+  - {name: name_enc, type: string, source: name, transform: "encrypt:member", classification: personal_encrypted}
+  - {name: phone_token, type: string, source: phone, transform: "token:phone", classification: personal_token}
+  - {name: birth_year, type: int, source: birth_date, transform: "generalize:birth_year", classification: personal_generalized}
+  - {name: grade, type: string, source: grade, classification: internal, accepted_values: [BASIC, SILVER, GOLD, VIP]}
+  - {name: marketing_agreed, type: boolean, source: marketing_agreed, classification: internal}
+  - {name: status, type: string, source: status, classification: internal, accepted_values: [ACTIVE, DORMANT, WITHDRAWN]}
+  - {name: joined_at, type: timestamp, source: joined_at, transform: ts_kst_local_ms, classification: internal, description: "레거시 KST DATETIME → UTC"}
+  - {name: withdrawn_at, type: timestamp, source: withdrawn_at, transform: ts_kst_local_ms, classification: internal}
+  - {name: updated_at, type: timestamp, source: updated_at, transform: ts_iso, classification: internal}
+quality:
+  - {not_null: [member_token, grade, status, joined_at]}

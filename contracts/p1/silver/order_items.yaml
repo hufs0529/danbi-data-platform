@@ -1,0 +1,19 @@
+dataset: silver.order_items
+owner: team-commerce-data
+description: 주문 아이템 최신 상태 (1행 = 1아이템). 주문 시점 판매가(unit_price)를 담는다
+grain: [order_item_id]
+source: {db: commerce, table: order_items}
+update: merge
+partition: ["month(created_at)"]
+retention: {class: ecommerce_transaction_5y}
+sla: {freshness_minutes: 15}
+columns:
+  - {name: order_item_id, type: bigint, source: order_item_id, classification: internal}
+  - {name: order_id, type: bigint, source: order_id, classification: internal}
+  - {name: product_id, type: bigint, source: product_id, classification: internal}
+  - {name: quantity, type: int, source: quantity, classification: internal}
+  - {name: unit_price, type: "decimal(12,0)", source: unit_price, classification: internal}
+  - {name: discount_amount, type: "decimal(12,0)", source: discount_amount, classification: internal}
+  - {name: status, type: string, source: status, classification: internal, accepted_values: [ORDERED, CANCELED]}
+  - {name: created_at, type: timestamp, source: created_at, transform: ts_iso, classification: internal}
+  - {name: updated_at, type: timestamp, source: updated_at, transform: ts_iso, classification: internal}

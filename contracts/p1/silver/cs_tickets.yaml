@@ -1,0 +1,19 @@
+dataset: silver.cs_tickets
+owner: team-cs-data
+description: CS 문의. 본문은 수집 시점에 PII 탐지·마스킹되어 들어온다(S-C4 만족도 데이터셋의 원천)
+grain: [ticket_id]
+source: {db: commerce, table: cs_tickets}
+update: merge
+partition: ["month(created_at)"]
+retention: {class: ecommerce_dispute_3y}
+sla: {freshness_minutes: 15}
+columns:
+  - {name: ticket_id, type: bigint, source: ticket_id, classification: internal}
+  - {name: member_token, type: string, source: member_id, transform: "token:member", classification: personal_token}
+  - {name: order_id, type: bigint, source: order_id, classification: internal}
+  - {name: category, type: string, source: category, classification: internal}
+  - {name: status, type: string, source: status, classification: internal}
+  - {name: content_masked, type: string, source: content, transform: "mask:text", classification: personal_generalized}
+  - {name: satisfaction, type: int, source: satisfaction, classification: internal}
+  - {name: created_at, type: timestamp, source: created_at, transform: ts_iso, classification: internal}
+  - {name: updated_at, type: timestamp, source: updated_at, transform: ts_iso, classification: internal}

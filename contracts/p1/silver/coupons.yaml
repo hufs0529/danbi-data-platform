@@ -1,0 +1,19 @@
+dataset: silver.coupons
+owner: team-marketing-data
+description: 쿠폰 정의 최신 상태
+grain: [coupon_id]
+source: {db: commerce, table: coupons}
+update: merge
+partition: []
+retention: {class: business_record}
+sla: {freshness_minutes: 15}
+columns:
+  - {name: coupon_id, type: bigint, source: coupon_id, classification: internal}
+  - {name: code, type: string, source: code, classification: internal}
+  - {name: discount_type, type: string, source: discount_type, classification: internal, accepted_values: [AMOUNT, RATE]}
+  - {name: discount_value, type: "decimal(12,2)", source: discount_value, classification: internal}
+  - {name: max_discount, type: "decimal(12,0)", source: max_discount, classification: internal}
+  - {name: total_quantity, type: int, source: total_quantity, classification: internal}
+  - {name: issued_quantity, type: int, source: issued_quantity, classification: internal}
+  - {name: valid_from, type: timestamp, source: valid_from, transform: ts_iso, classification: internal}
+  - {name: valid_to, type: timestamp, source: valid_to, transform: ts_iso, classification: internal}

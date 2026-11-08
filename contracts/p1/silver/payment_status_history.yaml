@@ -1,0 +1,16 @@
+dataset: silver.payment_status_history
+owner: team-payment-data
+description: 결제 상태 전이 이력 (append). 매입·취소 금액의 원천
+grain: [id]
+source: {db: payment, table: payment_status_history}
+update: merge
+partition: ["month(occurred_at)"]
+retention: {class: ecommerce_transaction_5y}
+sla: {freshness_minutes: 15}
+columns:
+  - {name: id, type: bigint, source: id, classification: internal}
+  - {name: payment_id, type: bigint, source: payment_id, classification: internal}
+  - {name: from_status, type: string, source: from_status, classification: internal}
+  - {name: to_status, type: string, source: to_status, classification: internal}
+  - {name: amount, type: "decimal(12,0)", source: amount, classification: internal}
+  - {name: occurred_at, type: timestamp, source: occurred_at, transform: ts_iso, classification: internal}
