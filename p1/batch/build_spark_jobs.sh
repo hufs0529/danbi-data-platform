@@ -23,9 +23,15 @@ for job in silver_merge maintenance publish_gold; do
     printf 'from p1.batch.jobs.%s import main\n\nif __name__ == "__main__":\n    main()\n' "$job" > "$OUT/$job.py"
   fi
 done
+# OpenLineage Spark 리스너 jar (EMR 7.x = Spark 3.5 / Scala 2.12)
+OL_VERSION="${OL_VERSION:-1.40.1}"
+mkdir -p "$ROOT/out/spark/lib"
+curl -fsSL -o "$ROOT/out/spark/lib/openlineage-spark.jar" \
+  "https://repo1.maven.org/maven2/io/openlineage/openlineage-spark_2.12/$OL_VERSION/openlineage-spark_2.12-$OL_VERSION.jar"
 echo "built $OUT"
 if [[ "${1:-}" == "--upload" ]]; then
   bucket="$(aws ssm get-parameter --name /danbi/dev/p1/streaming/artifacts_bucket --query Parameter.Value --output text)"
   aws s3 sync "$OUT" "s3://$bucket/spark/$SHA/"
+  aws s3 cp "$ROOT/out/spark/lib/openlineage-spark.jar" "s3://$bucket/spark/lib/openlineage-spark.jar"
   echo "spark_jobs_version = \"$SHA\"   # infra/envs/dev/p1-40-processing.tfvars"
 fi

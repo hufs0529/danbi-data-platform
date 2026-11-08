@@ -171,8 +171,14 @@ USERS: dict[str, dict[str, DbUser]] = {
             ),
         ),
         "recon": DbUser("recon", ("GRANT SELECT ON ALL TABLES IN SCHEMA public TO {u}",)),
+        # 계보 메타데이터(Marquez)는 결제 DB 인스턴스의 별도 데이터베이스에 둔다(dev 비용 절충, ADR P1-08 대체).
+        # 결제 테이블 권한은 없고 자기 DB 만 소유한다
+        "marquez": DbUser("marquez", ("ALTER DATABASE marquez OWNER TO {u}",)),
     },
 }
+
+# 트랜잭션 안에서 실행할 수 없는 문장(CREATE DATABASE)은 존재 여부를 확인하고 따로 실행한다
+EXTRA_DATABASES = {"postgres": ["marquez"]}
 
 _PW_ALPHABET = string.ascii_letters + string.digits + "-_"
 
@@ -257,6 +263,12 @@ def run(args: argparse.Namespace) -> None:
         cur.execute(
             f"INSERT INTO schema_migrations (version, checksum) VALUES ({ph}, {ph})", (m.version, m.checksum)
         )
+
+    for db in EXTRA_DATABASES.get(args.engine, []):
+        cur.execute("SELECT 1 FROM pg_database WHERE datname = %s", (db,))
+        if cur.fetchone() is None:
+            cur.execute(f"CREATE DATABASE {db}")
+            print(f"create database {db}")
 
     if args.bootstrap_users:
         secret_prefix = get_parameter(f"{prefix}/db_user_secret_prefix")

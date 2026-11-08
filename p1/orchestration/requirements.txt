@@ -1,0 +1,4 @@
+# MWAA 가 Airflow 버전별 제약 파일(constraints)로 버전을 고정한다. 여기에는 이름만 적는다
+apache-airflow-providers-amazon
+apache-airflow-providers-openlineage
+apache-airflow-providers-common-messaging
