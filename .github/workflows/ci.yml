@@ -33,6 +33,23 @@ jobs:
       - run: ruff format --check .
       - run: pytest -q
 
+  dbt:
+    # 연결 없이 구문·참조·테스트 정의·시맨틱 레이어를 검사한다(parse). 실제 build 는 MWAA 가 VPC 안에서
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: p1/dbt
+    env:
+      DBT_PROFILES_DIR: .
+      DO_NOT_TRACK: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install 'dbt-core==1.12.*' 'dbt-athena-community==1.11.*'
+      - run: dbt parse --no-partial-parse --warn-error-options '{"error": ["NoNodesForSelectionCriteria"]}'
+
   terraform:
     runs-on: ubuntu-latest
     steps:
