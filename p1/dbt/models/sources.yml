@@ -1,0 +1,26 @@
+version: 2
+sources:
+  - name: silver
+    schema: silver
+    description: 계약(contracts/p1/silver)으로 정의된 Silver 테이블
+    freshness:
+      warn_after: {count: 30, period: minute}
+      error_after: {count: 60, period: minute}
+    loaded_at_field: _ingested_at
+    tables:
+      - name: orders
+      - name: order_items
+      - name: members
+      - name: member_addresses
+      - name: dim_member_scd2
+        loaded_at_field: _ingested_at
+      - name: products
+        freshness: null
+      - name: product_prices_scd2
+        freshness: null
+      - name: payments
+      - name: payment_status_history
+        loaded_at_field: _ingested_at
+      - name: payment_events
+      - name: refunds
+      - name: events_clean

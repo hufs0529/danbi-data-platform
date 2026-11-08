@@ -1,0 +1,81 @@
+version: 2
+# 지표 정의의 단일 원본(FR-16, S-G5). "매출"이 팀마다 다르던 문제를 여기서 끝낸다.
+# 대시보드는 지표 이름과 metric_version 을 함께 표시하고, 이 파일의 설명으로 링크한다.
+
+time_spines:
+  - name: metricflow_time_spine
+    primary_column:
+      name: date_day
+      granularity: day
+
+semantic_models:
+  - name: daily_sales
+    description: 일별 결제·매출 (KST, 취소 발생일 기준)
+    model: ref('mart_daily_sales')
+    defaults:
+      agg_time_dimension: date_kst
+    entities:
+      - name: sales_day
+        type: primary
+        expr: date_kst
+    dimensions:
+      - name: date_kst
+        type: time
+        type_params: {time_granularity: day}
+    measures:
+      - name: gmv
+        description: 결제 승인 금액 합(취소 전, 쿠폰 할인 후)
+        agg: sum
+      - name: net_sales
+        description: 매입 - 취소·환불 (발생일 기준)
+        agg: sum
+      - name: payments
+        agg: sum
+
+  - name: funnel
+    description: 일별·플랫폼별 세션 퍼널(봇 제외)
+    model: ref('mart_funnel')
+    defaults:
+      agg_time_dimension: date_kst
+    entities:
+      - name: funnel_row
+        type: primary
+        expr: "concat(cast(date_kst as varchar), platform)"
+    dimensions:
+      - name: date_kst
+        type: time
+        type_params: {time_granularity: day}
+      - name: platform
+        type: categorical
+    measures:
+      - name: sessions
+        agg: sum
+      - name: purchase_sessions
+        agg: sum
+
+metrics:
+  - name: gmv
+    label: GMV(총거래액)
+    description: "결제 승인 금액 합. 쿠폰 할인 '후' 결제액이며 취소를 빼지 않는다. 재무 매출이 아니다"
+    type: simple
+    type_params: {measure: gmv}
+  - name: net_sales
+    label: 순매출
+    description: "매입 금액 - 취소·환불 금액. 취소 발생일 기준(원주문일 기준은 mart_daily_sales_by_order_date)"
+    type: simple
+    type_params: {measure: net_sales}
+  - name: sessions
+    label: 방문 세션
+    type: simple
+    type_params: {measure: sessions}
+  - name: purchase_sessions
+    label: 구매 세션
+    type: simple
+    type_params: {measure: purchase_sessions}
+  - name: conversion_rate
+    label: 전환율
+    description: "purchase 세션 수 / 방문 세션 수. 봇 제외 규칙 버전(bot_rule_version)에 묶인다"
+    type: ratio
+    type_params:
+      numerator: purchase_sessions
+      denominator: sessions

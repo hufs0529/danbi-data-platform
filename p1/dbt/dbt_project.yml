@@ -1,0 +1,35 @@
+name: danbi
+version: "1.0.0"
+config-version: 2
+profile: danbi
+
+model-paths: ["models"]
+macro-paths: ["macros"]
+test-paths: ["tests"]
+target-path: target
+clean-targets: [target, dbt_packages]
+
+vars:
+  metric_version: "2026.10"     # 지표 정의를 바꾸면 올린다. 대시보드에 함께 표시(S-G5)
+  null_ratio_threshold: 0.01     # F-08: 금액 null 비율 상한
+
+models:
+  danbi:
+    +on_schema_change: fail      # 스키마가 바뀌면 조용히 넘어가지 않는다
+    staging:
+      +materialized: ephemeral
+    marts:
+      # WAP(Write-Audit-Publish): 모든 Gold 는 먼저 gold_audit 에 쓴다. 테스트를 통과하면
+      # EMR 게시 잡(publish_gold)이 gold 로 원자적으로 교체한다. 분석가는 gold 만 볼 수 있다(P1-12)
+      +schema: gold_audit
+      +materialized: table
+      +table_type: iceberg
+      +format: parquet
+      +write_compression: zstd
+      +tags: [publish]
+      +persist_docs: {relation: true, columns: true}
+
+tests:
+  danbi:
+    +severity: error
+    +store_failures: false

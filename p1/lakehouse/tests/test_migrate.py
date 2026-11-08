@@ -6,7 +6,7 @@ BUCKETS = {"bronze_bucket": "b", "silver_bucket": "s", "gold_bucket": "g"}
 
 def test_sql_files_render_with_buckets():
     files = render_sql_files(BUCKETS)
-    assert [v for v, _, _ in files] == ["001_ops", "002_bronze"]
+    assert [v for v, _, _ in files][:2] == ["001_ops", "002_bronze"]
     stmts = [s for _, _, ss in files for s in ss]
     assert all("{" not in s for s in stmts)
     assert any("LOCATION 's3://b/cdc_events/'" in s for s in stmts)

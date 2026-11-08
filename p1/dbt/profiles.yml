@@ -1,0 +1,15 @@
+# 비밀이 없는 프로필(자격증명은 ECS 태스크 역할). 값은 환경변수로 받는다.
+danbi:
+  target: dev
+  outputs:
+    dev:
+      type: athena
+      region_name: "{{ env_var('AWS_REGION', 'ap-northeast-2') }}"
+      database: awsdatacatalog
+      schema: gold_audit
+      work_group: "{{ env_var('ATHENA_WORKGROUP', 'danbi-dev-pipeline') }}"
+      s3_staging_dir: "s3://{{ env_var('ATHENA_BUCKET', 'danbi-dev-athena-000000000000') }}/dbt/"
+      s3_data_dir: "s3://{{ env_var('GOLD_BUCKET', 'danbi-dev-gold-000000000000') }}/_audit/"
+      s3_data_naming: schema_table_unique   # 재생성할 때 이전 경로를 재사용하지 않는다(읽는 중인 쿼리 보호)
+      threads: 4
+      num_retries: 2

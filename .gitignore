@@ -37,3 +37,6 @@ out/
 # 로컬 비밀
 .env
 *.pem
+p1/dbt/.user.yml
+p1/dbt/logs/
+p1/streaming/java/target/

@@ -1,0 +1,70 @@
+version: 2
+
+models:
+  - name: fct_order_items
+    description: "그레인: 주문 아이템 1행. 주문 할인은 아이템 금액 비율로 배분(절사 차액은 마지막 아이템)"
+    meta: {owner: team-commerce-data, sla_kst: "07:00", classification: internal}
+    columns:
+      - name: order_item_id
+        tests: [unique, not_null]
+      - name: order_id
+        tests: [not_null]
+      - name: member_token
+        meta: {classification: personal_token}
+      - name: net_amount
+        tests:
+          - not_null
+          - null_ratio_below: {arguments: {threshold: 0}}
+      - name: member_grade_at_order
+        description: 주문 시점 등급(SCD2 시점 조인). null 이면 이력 누락 → 경고
+        tests:
+          - null_ratio_below: {arguments: {threshold: 0.001}, config: {severity: warn}}
+
+  - name: fct_payments
+    description: "그레인: 결제 1건(실패 제외). 매입·취소 누적, 정산 예정일(23:30 KST 마감)"
+    meta: {owner: team-payment-data, sla_kst: "07:00"}
+    columns:
+      - name: payment_key
+        tests: [unique, not_null]
+      - name: authorized_amount
+        tests:
+          - null_ratio_below: {arguments: {threshold: "{{ var('null_ratio_threshold') }}"}}   # F-08
+      - name: status
+        tests:
+          - accepted_values: {arguments: {values: [READY, APPROVED, CAPTURED, PARTIAL_CANCELED, CANCELED]}}
+      - name: net_amount
+        tests:
+          - expression_is_true: {arguments: {expression: "net_amount >= 0"}}
+
+  - name: mart_daily_sales
+    description: "그레인: KST 일자. 취소는 발생일 기준. 지표 정의는 semantic/metrics.yml, 버전은 metric_version"
+    meta: {owner: team-finance-data, sla_kst: "07:00", consumers: [재무 일일 리포트, 경영 대시보드]}
+    columns:
+      - name: date_kst
+        tests: [unique, not_null]
+      - name: net_sales
+        tests: [not_null]
+
+  - name: mart_daily_sales_by_order_date
+    description: 취소를 원주문일로 귀속한 순매출(과거 일자 값이 바뀔 수 있음)
+    columns:
+      - name: date_kst
+        tests: [unique, not_null]
+
+  - name: mart_funnel
+    description: "그레인: KST 일자 × 플랫폼. 봇 제외(bot_rule_version 기록)"
+    columns:
+      - name: conversion_rate
+        tests:
+          - expression_is_true: {arguments: {expression: "conversion_rate between 0 and 1"}}
+
+  - name: dim_member
+    description: 현재 회원 차원(암호문 컬럼 없음). 출생연대·시군구 조합은 재식별 위험 점검 대상(P1-13)
+    columns:
+      - name: member_token
+        tests: [unique, not_null]
+
+  - name: dim_product
+    columns:
+      - name: product_id
+        tests: [unique, not_null]
